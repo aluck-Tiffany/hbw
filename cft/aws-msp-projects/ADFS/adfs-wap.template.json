@@ -1,0 +1,2148 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Microsoft WAP/ADFS using public SSL certificate",
+  "Parameters": {
+    "AMIID": {
+      "Description": "Specify Windows 2016 AMI ID to use for Instances",
+      "Type": "String"
+    },
+    "InstanceType": {
+      "Description": "Amazon EC2 instance type for the ADFS Servers",
+      "Type": "String",
+      "Default": "t2.medium",
+      "AllowedValues": [
+        "t2.micro",
+        "t2.small",
+        "t2.medium"
+      ]
+    },
+    "RootVolSize": {
+      "Type": "String",
+      "Description": "For all deployed instances - Leave Blank for Default AMI Size",
+      "Default": "80"
+    },
+    "CostCentreTag": {
+      "Type": "String",
+      "Default": "management"
+    },
+    "AcmCertificateArn": {
+      "Type": "String",
+      "Description": "SSL AWS ACM Certificate ARN in us-east-1 region"
+    },
+    "SSLCertUrl": {
+      "Type": "String",
+      "Description": "Custom SSL certificate to use with Cloudfront distribution."
+    },
+    "SSLCertPass": {
+      "Type": "String",
+      "NoEcho": "true"
+    },
+    "DomainAdminUser": {
+      "AllowedPattern": "[a-zA-Z0-9]*",
+      "Default": "Admin",
+      "Description": "User name for the Domain Administrator. This is separate from the default \"Administrator\" account",
+      "MaxLength": "25",
+      "MinLength": "5",
+      "Type": "String"
+    },
+    "MicrosoftADPW": {
+      "Type": "String",
+      "NoEcho": "true"
+    },
+    "AdfsSvcUserPW": {
+      "Type": "String",
+      "NoEcho": "true"
+    },
+    "Endpoint1": {
+      "Type": "String",
+      "Description": "Email address to send ADFS/WAP Auto Recovery Notifications to"
+    },
+    "Customer": {
+      "Type": "String",
+      "Description": "Optional: Customer Name - This is only to be used if more than one customer AD is deployed into the account",
+      "Default": ""
+    },
+    "LegacyADOuName": {
+      "Type": "String",
+      "Description": "Optional: on-prem AD OU Name to hold ADFS container, leave empty for AWS Directory Serbvice",
+      "Default": ""
+    },
+    "SAMLProviderName": {
+      "Type": "String",
+      "Description": "Optional: if empty, ADFS claim rule will use datacom as SAMLProviderName",
+      "Default": ""
+    }
+  },
+  "Conditions": {
+    "RootVolSizeCond": {
+      "Fn::Not": [{
+        "Fn::Equals": [{
+            "Ref": "RootVolSize"
+          },
+          ""
+        ]
+      }]
+    },
+    "HasCustomer": {
+      "Fn::Not": [{
+        "Fn::Equals": [{
+            "Ref": "Customer"
+          },
+          ""
+        ]
+      }]
+    },
+    "HasLegacyADOuName": {
+      "Fn::Not": [{
+        "Fn::Equals": [{
+            "Ref": "LegacyADOuName"
+          },
+          ""
+        ]
+      }]
+    },
+    "HasSAMLProviderName": {
+      "Fn::Not": [{
+        "Fn::Equals": [{
+            "Ref": "SAMLProviderName"
+          },
+          ""
+        ]
+      }]
+    }
+  },
+  "Resources": {
+    "ADFSSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Management Clients",
+        "VpcId": {
+          "Fn::ImportValue": "VPC"
+        },
+        "SecurityGroupIngress": [{
+            "CidrIp": "0.0.0.0/0",
+            "IpProtocol": "tcp",
+            "FromPort": "443",
+            "ToPort": "443"
+          },
+          {
+            "CidrIp": {
+              "Fn::ImportValue": "VPCCidrBlock"
+            },
+            "IpProtocol": "tcp",
+            "FromPort": "80",
+            "ToPort": "80"
+          }
+        ],
+        "SecurityGroupEgress": [{
+            "CidrIp": "0.0.0.0/0",
+            "IpProtocol": "tcp",
+            "FromPort": "443",
+            "ToPort": "443"
+          },
+          {
+            "CidrIp": "0.0.0.0/0",
+            "IpProtocol": "-1"
+          }
+        ]
+      }
+    },
+    "ADFS1": {
+      "Type": "AWS::EC2::Instance",
+      "Metadata": {
+        "AWS::CloudFormation::Init": {
+          "configSets": {
+            "config": [
+              "setup",
+              "install"
+            ]
+          },
+          "setup": {
+            "files": {
+              "C:\\cfn\\cfn-hup.conf": {
+                "content": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "[main]\n",
+                      "stack=",
+                      {
+                        "Ref": "AWS::StackId"
+                      },
+                      "\n",
+                      "region=",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "C:\\cfn\\hooks.d\\cfn-auto-reloader.conf": {
+                "content": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "[cfn-auto-reloader-hook]\n",
+                      "triggers=post.update\n",
+                      "path=Resources.ADFS1.Metadata.AWS::CloudFormation::Init\n",
+                      "action=cfn-init.exe -v -s ",
+                      {
+                        "Ref": "AWS::StackId"
+                      },
+                      " -r ADFS1",
+                      " --region ",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "C:\\cfn\\scripts\\Unzip-Archive.ps1": {
+                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/Unzip-Archive.ps1"
+              },
+              "C:\\cfn\\modules\\AWSQuickStart.zip": {
+                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/AWSQuickStart.zip"
+              },
+              "C:\\cfn\\scripts\\Disable-CredSSP.ps1": {
+                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/Disable-CredSSP.ps1"
+              },
+              "C:\\cfn\\scripts\\Enable-CredSSP.ps1": {
+                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/Enable-CredSSP.ps1"
+              },
+              "C:\\cfn\\scripts\\Install-SSLCert.ps1": {
+                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/Install-SSLCert.ps1"
+              },
+              "C:\\cfn\\scripts\\Configure-ADFS.ps1": {
+                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/Configure-ADFS.ps1"
+              },
+              "C:\\cfn\\scripts\\auth.txt": {
+                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/auth.txt"
+              },
+              "C:\\cfn\\scripts\\claims.txt": {
+                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/claims.txt"
+              },
+              "C:\\cfn\\scripts\\Install-ADFS1-with-svcuser-and-sslcert.ps1": {
+                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/Install-ADFS1-with-svcuser-and-sslcert.ps1"
+              }
+            },
+            "commands": {
+              "a-set-execution-policy": {
+                "command": "powershell.exe -Command \"Set-ExecutionPolicy RemoteSigned -Force\"",
+                "waitAfterCompletion": "0"
+              },
+              "b-unpack-quickstart-module": {
+                "command": "powershell.exe -Command C:\\cfn\\scripts\\Unzip-Archive.ps1 -Source C:\\cfn\\modules\\AWSQuickStart.zip -Destination C:\\Windows\\system32\\WindowsPowerShell\\v1.0\\Modules\\",
+                "waitAfterCompletion": "0"
+              },
+              "c-init-quickstart-module": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "powershell.exe -Command \"",
+                      "New-AWSQuickStartWaitHandle -Handle '",
+                      {
+                        "Ref": "ADFS1Handle"
+                      },
+                      "'\""
+                    ]
+                  ]
+                },
+                "waitAfterCompletion": "0"
+              }
+            },
+            "services": {
+              "windows": {
+                "cfn-hup": {
+                  "enabled": "true",
+                  "ensureRunning": "true",
+                  "files": [
+                    "C:\\cfn\\cfn-hup.conf",
+                    "C:\\cfn\\hooks.d\\cfn-auto-reloader.conf"
+                  ]
+                }
+              }
+            }
+          },
+          "install": {
+            "commands": {
+              "a-disable-win-fw": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "powershell.exe -Command \"Get-NetFirewallProfile | Set-NetFirewallProfile -Enabled False\""
+                    ]
+                  ]
+                },
+                "waitAfterCompletion": "0"
+              },
+              "b-rename-computer": {
+                "command": "powershell.exe -Command \"Rename-Computer -NewName 'ADFS1' -Restart\"",
+                "waitAfterCompletion": "forever"
+              },
+              "c-set-dns-servers": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "powershell.exe -Command ",
+                      "\"",
+                      "Get-NetAdapter | Set-DnsClientServerAddress -ServerAddresses ",
+                      {
+                        "Fn::ImportValue": {
+                          "Fn::Sub": "${Customer}DnsIpAddresses"
+                        }
+                      },
+                      "\""
+                    ]
+                  ]
+                },
+                "waitAfterCompletion": "30"
+              },
+              "d-install-ssl-cert": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "powershell.exe -Command \"C:\\cfn\\scripts\\Install-SSLCert.ps1 -CertURL '",
+                      {
+                        "Ref": "SSLCertUrl"
+                      },
+                      "' -CertPassword '",
+                      {
+                        "Ref": "SSLCertPass"
+                      },
+                      "'\""
+                    ]
+                  ]
+                },
+                "waitAfterCompletion": "15"
+              },
+              "e-join-domain": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "powershell.exe ",
+                      "-Command \"",
+                      "Add-Computer -DomainName ",
+                      {
+                        "Fn::ImportValue": {
+                          "Fn::Sub": "${Customer}DomainDNSName"
+                        }
+                      },
+                      " -Credential ",
+                      "(New-Object System.Management.Automation.PSCredential('",
+                      {
+                        "Fn::ImportValue": {
+                          "Fn::Sub": "${Customer}DomainNetBIOSName"
+                        }
+                      },
+                      {
+                        "Fn::Sub": "\\${DomainAdminUser}',"
+                      },
+                      "(ConvertTo-SecureString ",
+                      {
+                        "Ref": "MicrosoftADPW"
+                      },
+                      " -AsPlainText -Force))) ",
+                      "-Restart\""
+                    ]
+                  ]
+                },
+                "waitAfterCompletion": "forever"
+              },
+              "f-enable-credssp": {
+                "command": "powershell.exe -ExecutionPolicy RemoteSigned -Command \"C:\\cfn\\scripts\\Enable-CredSSP.ps1\"",
+                "waitAfterCompletion": "0"
+              },
+              "g-install-adfs1": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "powershell.exe -Command \"C:\\cfn\\scripts\\Install-ADFS1-with-svcuser-and-sslcert.ps1 -DomainDNSName '",
+                      {
+                        "Fn::ImportValue": {
+                          "Fn::Sub": "${Customer}DomainDNSName"
+                        }
+                      },
+                      {
+                        "Fn::Sub": "' -DomainAdminUser '${DomainAdminUser}' -DomainAdminPW '${MicrosoftADPW}' -AdfsSvcUserPW '${AdfsSvcUserPW}'"
+                      },
+                      " -FederationServiceName '",
+                      {
+                        "Fn::ImportValue": {
+                          "Fn::Sub": "${Customer}Route53ZoneName"
+                        }
+                      },
+                      "'",
+                      {
+                        "Fn::If": [
+                          "HasLegacyADOuName",
+                          {
+                            "Fn::Sub": " -LegacyADOuName '${LegacyADOuName}'"
+                          },
+                          {
+                            "Ref": "AWS::NoValue"
+                          }
+                        ]
+                      },
+                      "\""
+                    ]
+                  ]
+                },
+                "waitAfterCompletion": "0"
+              },
+              "h-reboot": {
+                "command": "powershell.exe -Command Restart-Computer -Force",
+                "waitAfterCompletion": "forever"
+              },
+              "i-disable-credssp": {
+                "command": "powershell.exe -ExecutionPolicy RemoteSigned -Command \"C:\\cfn\\scripts\\Disable-CredSSP.ps1\"",
+                "waitAfterCompletion": "120"
+              },
+              "j-configure-adfs": {
+                "command": {
+                  "Fn::If": [
+                    "HasSAMLProviderName",
+                    {
+                      "Fn::Sub": "powershell.exe -Command \"C:\\cfn\\scripts\\Configure-ADFS.ps1 -SAMLProviderName '${SAMLProviderName}'\""
+                    },
+                    "powershell.exe -Command \"C:\\cfn\\scripts\\Configure-ADFS.ps1\""
+                  ]
+                },
+                "waitAfterCompletion": "15"
+              },
+              "k-signal-success": {
+                "command": "powershell -Command \"Write-AWSQuickStartStatus\"",
+                "waitAfterCompletion": "0"
+              }
+            }
+          }
+        }
+      },
+      "Properties": {
+        "BlockDeviceMappings": [{
+          "DeviceName": "/dev/sda1",
+          "Ebs": {
+            "VolumeType": "gp2",
+            "DeleteOnTermination": "true",
+            "VolumeSize": {
+              "Fn::If": [
+                "RootVolSizeCond",
+                {
+                  "Ref": "RootVolSize"
+                },
+                {
+                  "Ref": "AWS::NoValue"
+                }
+              ]
+            }
+          }
+        }],
+        "ImageId": {
+          "Ref": "AMIID"
+        },
+        "SubnetId": {
+          "Fn::ImportValue": "RestrictedASubnet"
+        },
+        "SecurityGroupIds": [{
+            "Ref": "ADFSSecurityGroup"
+          },
+          {
+            "Fn::ImportValue": {
+              "Fn::Sub": "${Customer}ManagementSecurityGroup"
+            }
+          }
+        ],
+        "InstanceType": {
+          "Ref": "InstanceType"
+        },
+        "KeyName": {
+          "Ref": "AWS::AccountId"
+        },
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Join": [
+              "",
+              [
+                "<script>\n",
+                "cfn-init.exe -v -c config -s ",
+                {
+                  "Ref": "AWS::StackId"
+                },
+                " -r ADFS1 ",
+                " --region ",
+                {
+                  "Ref": "AWS::Region"
+                },
+                "\n",
+                "</script>"
+              ]
+            ]
+          }
+        },
+        "Tags": [{
+            "Key": "Name",
+            "Value": {
+              "Fn::If": [
+                "HasCustomer",
+                {
+                  "Fn::Sub": "${Customer}-ADFS1"
+                },
+                "ADFS1"
+              ]
+            }
+          },
+          {
+            "Key": "CostCentre",
+            "Value": {
+              "Ref": "CostCentreTag"
+            }
+          }
+        ]
+      }
+    },
+    "ADFS1WaitCondition": {
+      "Type": "AWS::CloudFormation::WaitCondition",
+      "DependsOn": "ADFS1",
+      "Properties": {
+        "Handle": {
+          "Ref": "ADFS1Handle"
+        },
+        "Timeout": "3600"
+      }
+    },
+    "ADFS1Handle": {
+      "Type": "AWS::CloudFormation::WaitConditionHandle"
+    },
+    "ADFS2": {
+      "Type": "AWS::EC2::Instance",
+      "DependsOn": "ADFS1WaitCondition",
+      "Metadata": {
+        "AWS::CloudFormation::Init": {
+          "configSets": {
+            "config": [
+              "setup",
+              "install"
+            ]
+          },
+          "setup": {
+            "files": {
+              "C:\\cfn\\cfn-hup.conf": {
+                "content": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "[main]\n",
+                      "stack=",
+                      {
+                        "Ref": "AWS::StackId"
+                      },
+                      "\n",
+                      "region=",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "C:\\cfn\\hooks.d\\cfn-auto-reloader.conf": {
+                "content": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "[cfn-auto-reloader-hook]\n",
+                      "triggers=post.update\n",
+                      "path=Resources.ADFS2.Metadata.AWS::CloudFormation::Init\n",
+                      "action=cfn-init.exe -v -s ",
+                      {
+                        "Ref": "AWS::StackId"
+                      },
+                      " -r ADFS2",
+                      " --region ",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "C:\\cfn\\scripts\\Unzip-Archive.ps1": {
+                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/Unzip-Archive.ps1"
+              },
+              "C:\\cfn\\modules\\AWSQuickStart.zip": {
+                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/AWSQuickStart.zip"
+              },
+              "C:\\cfn\\scripts\\Disable-CredSSP.ps1": {
+                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/Disable-CredSSP.ps1"
+              },
+              "C:\\cfn\\scripts\\Enable-CredSSP.ps1": {
+                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/Enable-CredSSP.ps1"
+              },
+              "C:\\cfn\\scripts\\Install-SSLCert.ps1": {
+                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/Install-SSLCert.ps1"
+              },
+              "C:\\cfn\\scripts\\Install-ADFS2-with-svcuser-and-sslcert.ps1": {
+                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/Install-ADFS2-with-svcuser-and-sslcert.ps1"
+              }
+            },
+            "commands": {
+              "a-set-execution-policy": {
+                "command": "powershell.exe -Command \"Set-ExecutionPolicy RemoteSigned -Force\"",
+                "waitAfterCompletion": "0"
+              },
+              "b-unpack-quickstart-module": {
+                "command": "powershell.exe -Command C:\\cfn\\scripts\\Unzip-Archive.ps1 -Source C:\\cfn\\modules\\AWSQuickStart.zip -Destination C:\\Windows\\system32\\WindowsPowerShell\\v1.0\\Modules\\",
+                "waitAfterCompletion": "0"
+              },
+              "c-init-quickstart-module": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "powershell.exe -Command \"",
+                      "New-AWSQuickStartWaitHandle -Handle '",
+                      {
+                        "Ref": "ADFS2Handle"
+                      },
+                      "'\""
+                    ]
+                  ]
+                },
+                "waitAfterCompletion": "0"
+              }
+            },
+            "services": {
+              "windows": {
+                "cfn-hup": {
+                  "enabled": "true",
+                  "ensureRunning": "true",
+                  "files": [
+                    "C:\\cfn\\cfn-hup.conf",
+                    "C:\\cfn\\hooks.d\\cfn-auto-reloader.conf"
+                  ]
+                }
+              }
+            }
+          },
+          "install": {
+            "commands": {
+              "a-disable-win-fw": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "powershell.exe -Command \"Get-NetFirewallProfile | Set-NetFirewallProfile -Enabled False\""
+                    ]
+                  ]
+                },
+                "waitAfterCompletion": "0"
+              },
+              "b-rename-computer": {
+                "command": "powershell.exe -Command \"Rename-Computer -NewName 'ADFS2' -Restart\"",
+                "waitAfterCompletion": "forever"
+              },
+              "c-set-dns-servers": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "powershell.exe -Command ",
+                      "\"",
+                      "Get-NetAdapter | Set-DnsClientServerAddress -ServerAddresses ",
+                      {
+                        "Fn::ImportValue": {
+                          "Fn::Sub": "${Customer}DnsIpAddresses"
+                        }
+                      },
+                      "\""
+                    ]
+                  ]
+                },
+                "waitAfterCompletion": "30"
+              },
+              "d-install-ssl-cert": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "powershell.exe -Command \"C:\\cfn\\scripts\\Install-SSLCert.ps1 -CertURL '",
+                      {
+                        "Ref": "SSLCertUrl"
+                      },
+                      "' -CertPassword '",
+                      {
+                        "Ref": "SSLCertPass"
+                      },
+                      "'\""
+                    ]
+                  ]
+                },
+                "waitAfterCompletion": "15"
+              },
+              "e-join-domain": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "powershell.exe ",
+                      "-Command \"",
+                      "Add-Computer -DomainName ",
+                      {
+                        "Fn::ImportValue": {
+                          "Fn::Sub": "${Customer}DomainDNSName"
+                        }
+                      },
+                      " -Credential ",
+                      "(New-Object System.Management.Automation.PSCredential('",
+                      {
+                        "Fn::ImportValue": {
+                          "Fn::Sub": "${Customer}DomainNetBIOSName"
+                        }
+                      },
+                      {
+                        "Fn::Sub": "\\${DomainAdminUser}',"
+                      },
+                      "(ConvertTo-SecureString ",
+                      {
+                        "Ref": "MicrosoftADPW"
+                      },
+                      " -AsPlainText -Force))) ",
+                      "-Restart\""
+                    ]
+                  ]
+                },
+                "waitAfterCompletion": "forever"
+              },
+              "f-enable-credssp": {
+                "command": "powershell.exe -ExecutionPolicy RemoteSigned -Command \"C:\\cfn\\scripts\\Enable-CredSSP.ps1",
+                "waitAfterCompletion": "0"
+              },
+              "g-install-adfs2": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "powershell.exe -Command \"C:\\cfn\\scripts\\Install-ADFS2-with-svcuser-and-sslcert.ps1 -DomainDNSName '",
+                      {
+                        "Fn::ImportValue": {
+                          "Fn::Sub": "${Customer}DomainDNSName"
+                        }
+                      },
+                      "' -AdfsSvcUserPW '",
+                      {
+                        "Ref": "AdfsSvcUserPW"
+                      },
+                      "'\""
+                    ]
+                  ]
+                },
+                "waitAfterCompletion": "0"
+              },
+              "h-reboot": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "powershell.exe -Command Restart-Computer -Force"
+                    ]
+                  ]
+                },
+                "waitAfterCompletion": "forever"
+              },
+              "i-disable-credssp": {
+                "command": "powershell.exe -ExecutionPolicy RemoteSigned -Command \"C:\\cfn\\scripts\\Disable-CredSSP.ps1\"",
+                "waitAfterCompletion": "0"
+              },
+              "j-signal-success": {
+                "command": "powershell -Command \"Write-AWSQuickStartStatus\"",
+                "waitAfterCompletion": "0"
+              }
+            }
+          }
+        }
+      },
+      "Properties": {
+        "BlockDeviceMappings": [{
+          "DeviceName": "/dev/sda1",
+          "Ebs": {
+            "VolumeType": "gp2",
+            "DeleteOnTermination": "true",
+            "VolumeSize": {
+              "Fn::If": [
+                "RootVolSizeCond",
+                {
+                  "Ref": "RootVolSize"
+                },
+                {
+                  "Ref": "AWS::NoValue"
+                }
+              ]
+            }
+          }
+        }],
+        "ImageId": {
+          "Ref": "AMIID"
+        },
+        "SubnetId": {
+          "Fn::ImportValue": "RestrictedBSubnet"
+        },
+        "SecurityGroupIds": [{
+            "Ref": "ADFSSecurityGroup"
+          },
+          {
+            "Fn::ImportValue": {
+              "Fn::Sub": "${Customer}ManagementSecurityGroup"
+            }
+          }
+        ],
+        "InstanceType": {
+          "Ref": "InstanceType"
+        },
+        "KeyName": {
+          "Ref": "AWS::AccountId"
+        },
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Join": [
+              "",
+              [
+                "<script>\n",
+                "cfn-init.exe -v -c config -s ",
+                {
+                  "Ref": "AWS::StackId"
+                },
+                " -r ADFS2 ",
+                " --region ",
+                {
+                  "Ref": "AWS::Region"
+                },
+                "\n",
+                "</script>"
+              ]
+            ]
+          }
+        },
+        "Tags": [{
+            "Key": "Name",
+            "Value": {
+              "Fn::If": [
+                "HasCustomer",
+                {
+                  "Fn::Sub": "${Customer}-ADFS2"
+                },
+                "ADFS2"
+              ]
+            }
+          },
+          {
+            "Key": "CostCentre",
+            "Value": {
+              "Ref": "CostCentreTag"
+            }
+          }
+        ]
+      }
+    },
+    "ADFS2WaitCondition": {
+      "Type": "AWS::CloudFormation::WaitCondition",
+      "DependsOn": "ADFS2",
+      "Properties": {
+        "Handle": {
+          "Ref": "ADFS2Handle"
+        },
+        "Timeout": "3600"
+      }
+    },
+    "ADFS2Handle": {
+      "Type": "AWS::CloudFormation::WaitConditionHandle"
+    },
+    "ADFSELB": {
+      "Type": "AWS::ElasticLoadBalancing::LoadBalancer",
+      "DependsOn": "ADFS2WaitCondition",
+      "Properties": {
+        "Subnets": [{
+            "Fn::ImportValue": "RestrictedASubnet"
+          },
+          {
+            "Fn::ImportValue": "RestrictedBSubnet"
+          }
+        ],
+        "Scheme": "internal",
+        "SecurityGroups": [{
+          "Ref": "ADFSLoadBalancerSecurityGroup"
+        }],
+        "CrossZone": "true",
+        "Listeners": [{
+          "LoadBalancerPort": "443",
+          "InstancePort": "443",
+          "Protocol": "TCP"
+        }],
+        "Instances": [{
+            "Ref": "ADFS1"
+          },
+          {
+            "Ref": "ADFS2"
+          }
+        ],
+        "Tags": [{
+            "Key": "Name",
+            "Value": "ADFSELB"
+          },
+          {
+            "Key": "CostCentre",
+            "Value": {
+              "Ref": "CostCentreTag"
+            }
+          }
+        ]
+      }
+    },
+    "ADFSLoadBalancerSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "ADFS ELB Security Group",
+        "VpcId": {
+          "Fn::ImportValue": "VPC"
+        },
+        "SecurityGroupIngress": [{
+          "CidrIp": "0.0.0.0/0",
+          "IpProtocol": "tcp",
+          "FromPort": "443",
+          "ToPort": "443"
+        }],
+        "SecurityGroupEgress": [{
+          "CidrIp": "0.0.0.0/0",
+          "IpProtocol": "tcp",
+          "FromPort": "443",
+          "ToPort": "443"
+        }]
+      }
+    },
+    "AdfsRoute53Record": {
+      "Type": "AWS::Route53::RecordSetGroup",
+      "Properties": {
+        "HostedZoneId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "${Customer}Route53HostedZone"
+          }
+        },
+        "Comment": "Zone apex alias targeted to ADFS LoadBalancer.",
+        "RecordSets": [{
+          "Name": {
+            "Fn::Join": [
+              "",
+              [{
+                  "Fn::ImportValue": {
+                    "Fn::Sub": "${Customer}Route53ZoneName"
+                  }
+                },
+                "."
+              ]
+            ]
+          },
+          "Type": "A",
+          "AliasTarget": {
+            "HostedZoneId": {
+              "Fn::GetAtt": [
+                "ADFSELB",
+                "CanonicalHostedZoneNameID"
+              ]
+            },
+            "DNSName": {
+              "Fn::GetAtt": [
+                "ADFSELB",
+                "DNSName"
+              ]
+            }
+          }
+        }]
+      }
+    },
+    "WAPLoadBalancerSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "WAP ELB Security Group",
+        "VpcId": {
+          "Fn::ImportValue": "VPC"
+        },
+        "SecurityGroupIngress": [{
+          "CidrIp": "0.0.0.0/0",
+          "IpProtocol": "tcp",
+          "FromPort": "443",
+          "ToPort": "443"
+        }],
+        "SecurityGroupEgress": [{
+          "CidrIp": "0.0.0.0/0",
+          "IpProtocol": "tcp",
+          "FromPort": "443",
+          "ToPort": "443"
+        }]
+      }
+    },
+    "WAPSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "WAP Security Group",
+        "VpcId": {
+          "Fn::ImportValue": "VPC"
+        },
+        "SecurityGroupIngress": [{
+          "CidrIp": "0.0.0.0/0",
+          "IpProtocol": "tcp",
+          "FromPort": "443",
+          "ToPort": "443"
+        }],
+        "SecurityGroupEgress": [{
+          "CidrIp": "0.0.0.0/0",
+          "IpProtocol": "tcp",
+          "FromPort": "443",
+          "ToPort": "443"
+        }]
+      }
+    },
+    "WAP1": {
+      "Type": "AWS::EC2::Instance",
+      "DependsOn": "AdfsRoute53Record",
+      "Metadata": {
+        "AWS::CloudFormation::Init": {
+          "configSets": {
+            "config": [
+              "setup",
+              "install"
+            ]
+          },
+          "setup": {
+            "files": {
+              "C:\\cfn\\cfn-hup.conf": {
+                "content": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "[main]\n",
+                      "stack=",
+                      {
+                        "Ref": "AWS::StackId"
+                      },
+                      "\n",
+                      "region=",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "C:\\cfn\\hooks.d\\cfn-auto-reloader.conf": {
+                "content": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "[cfn-auto-reloader-hook]\n",
+                      "triggers=post.update\n",
+                      "path=Resources.WAP1.Metadata.AWS::CloudFormation::Init\n",
+                      "action=cfn-init.exe -v -s ",
+                      {
+                        "Ref": "AWS::StackId"
+                      },
+                      " -r WAP1",
+                      " --region ",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "C:\\cfn\\scripts\\Unzip-Archive.ps1": {
+                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/Unzip-Archive.ps1"
+              },
+              "C:\\cfn\\modules\\AWSQuickStart.zip": {
+                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/AWSQuickStart.zip"
+              },
+              "C:\\cfn\\scripts\\Disable-CredSSP.ps1": {
+                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/Disable-CredSSP.ps1"
+              },
+              "C:\\cfn\\scripts\\Enable-CredSSP.ps1": {
+                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/Enable-CredSSP.ps1"
+              },
+              "C:\\cfn\\scripts\\Install-SSLCert.ps1": {
+                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/Install-SSLCert.ps1"
+              },
+              "C:\\cfn\\scripts\\Install-WAP-with-sslcert.ps1": {
+                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/Install-WAP-with-sslcert.ps1"
+              }
+            },
+            "commands": {
+              "a-set-execution-policy": {
+                "command": "powershell.exe -Command \"Set-ExecutionPolicy RemoteSigned -Force\"",
+                "waitAfterCompletion": "0"
+              },
+              "b-unpack-quickstart-module": {
+                "command": "powershell.exe -Command C:\\cfn\\scripts\\Unzip-Archive.ps1 -Source C:\\cfn\\modules\\AWSQuickStart.zip -Destination C:\\Windows\\system32\\WindowsPowerShell\\v1.0\\Modules\\",
+                "waitAfterCompletion": "0"
+              },
+              "c-init-quickstart-module": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "powershell.exe -Command \"",
+                      "New-AWSQuickStartWaitHandle -Handle '",
+                      {
+                        "Ref": "WAP1Handle"
+                      },
+                      "'\""
+                    ]
+                  ]
+                },
+                "waitAfterCompletion": "0"
+              }
+            },
+            "services": {
+              "windows": {
+                "cfn-hup": {
+                  "enabled": "true",
+                  "ensureRunning": "true",
+                  "files": [
+                    "C:\\cfn\\cfn-hup.conf",
+                    "C:\\cfn\\hooks.d\\cfn-auto-reloader.conf"
+                  ]
+                }
+              }
+            }
+          },
+          "install": {
+            "commands": {
+              "a-disable-win-fw": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "powershell.exe -Command \"Get-NetFirewallProfile | Set-NetFirewallProfile -Enabled False\""
+                    ]
+                  ]
+                },
+                "waitAfterCompletion": "0"
+              },
+              "b-rename-computer": {
+                "command": "powershell.exe -Command \"Rename-Computer -NewName 'WAP1' -Restart\"",
+                "waitAfterCompletion": "forever"
+              },
+              "c-install-ssl-cert": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "powershell.exe -Command \"C:\\cfn\\scripts\\Install-SSLCert.ps1 -CertURL '",
+                      {
+                        "Ref": "SSLCertUrl"
+                      },
+                      "' -CertPassword '",
+                      {
+                        "Ref": "SSLCertPass"
+                      },
+                      "'\""
+                    ]
+                  ]
+                },
+                "waitAfterCompletion": "15"
+              },
+              "d-enable-credssp": {
+                "command": "powershell.exe -ExecutionPolicy RemoteSigned -Command \"C:\\cfn\\scripts\\Enable-CredSSP.ps1",
+                "waitAfterCompletion": "0"
+              },
+              "e-install-wap": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "powershell.exe -Command \"C:\\cfn\\scripts\\Install-WAP-with-sslcert.ps1 -DomainDNSName '",
+                      {
+                        "Fn::ImportValue": {
+                          "Fn::Sub": "${Customer}DomainDNSName"
+                        }
+                      },
+                      "' -AdfsSvcUserPW '",
+                      {
+                        "Ref": "AdfsSvcUserPW"
+                      },
+                      "' -FederationServiceName '",
+                      {
+                        "Fn::ImportValue": {
+                          "Fn::Sub": "${Customer}Route53ZoneName"
+                        }
+                      },
+                      "'\""
+                    ]
+                  ]
+                },
+                "waitAfterCompletion": "0"
+              },
+              "f-reboot": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "powershell.exe -Command Restart-Computer -Force"
+                    ]
+                  ]
+                },
+                "waitAfterCompletion": "forever"
+              },
+              "g-disable-credssp": {
+                "command": "powershell.exe -ExecutionPolicy RemoteSigned -Command \"C:\\cfn\\scripts\\Disable-CredSSP.ps1\"",
+                "waitAfterCompletion": "0"
+              },
+              "h-signal-success": {
+                "command": "powershell -Command \"Write-AWSQuickStartStatus\"",
+                "waitAfterCompletion": "0"
+              }
+            }
+          }
+        }
+      },
+      "Properties": {
+        "BlockDeviceMappings": [{
+          "DeviceName": "/dev/sda1",
+          "Ebs": {
+            "VolumeType": "gp2",
+            "DeleteOnTermination": "true",
+            "VolumeSize": {
+              "Fn::If": [
+                "RootVolSizeCond",
+                {
+                  "Ref": "RootVolSize"
+                },
+                {
+                  "Ref": "AWS::NoValue"
+                }
+              ]
+            }
+          }
+        }],
+        "ImageId": {
+          "Ref": "AMIID"
+        },
+        "SubnetId": {
+          "Fn::ImportValue": "RestrictedASubnet"
+        },
+        "SecurityGroupIds": [{
+            "Ref": "WAPSecurityGroup"
+          },
+          {
+            "Fn::ImportValue": {
+              "Fn::Sub": "${Customer}ManagementSecurityGroup"
+            }
+          }
+        ],
+        "InstanceType": {
+          "Ref": "InstanceType"
+        },
+        "KeyName": {
+          "Ref": "AWS::AccountId"
+        },
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Join": [
+              "",
+              [
+                "<script>\n",
+                "cfn-init.exe -v -c config -s ",
+                {
+                  "Ref": "AWS::StackId"
+                },
+                " -r WAP1 ",
+                " --region ",
+                {
+                  "Ref": "AWS::Region"
+                },
+                "\n",
+                "</script>"
+              ]
+            ]
+          }
+        },
+        "Tags": [{
+            "Key": "Name",
+            "Value": {
+              "Fn::If": [
+                "HasCustomer",
+                {
+                  "Fn::Sub": "${Customer}-WAP1"
+                },
+                "WAP1"
+              ]
+            }
+          },
+          {
+            "Key": "CostCentre",
+            "Value": {
+              "Ref": "CostCentreTag"
+            }
+          }
+        ]
+      }
+    },
+    "WAP1WaitCondition": {
+      "Type": "AWS::CloudFormation::WaitCondition",
+      "DependsOn": "WAP1",
+      "Properties": {
+        "Handle": {
+          "Ref": "WAP1Handle"
+        },
+        "Timeout": "3600"
+      }
+    },
+    "WAP1Handle": {
+      "Type": "AWS::CloudFormation::WaitConditionHandle"
+    },
+    "WAP2": {
+      "Type": "AWS::EC2::Instance",
+      "DependsOn": "WAP1",
+      "Metadata": {
+        "AWS::CloudFormation::Init": {
+          "configSets": {
+            "config": [
+              "setup",
+              "install"
+            ]
+          },
+          "setup": {
+            "files": {
+              "C:\\cfn\\cfn-hup.conf": {
+                "content": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "[main]\n",
+                      "stack=",
+                      {
+                        "Ref": "AWS::StackId"
+                      },
+                      "\n",
+                      "region=",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "C:\\cfn\\hooks.d\\cfn-auto-reloader.conf": {
+                "content": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "[cfn-auto-reloader-hook]\n",
+                      "triggers=post.update\n",
+                      "path=Resources.WAP2.Metadata.AWS::CloudFormation::Init\n",
+                      "action=cfn-init.exe -v -s ",
+                      {
+                        "Ref": "AWS::StackId"
+                      },
+                      " -r WAP2",
+                      " --region ",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "C:\\cfn\\scripts\\Unzip-Archive.ps1": {
+                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/Unzip-Archive.ps1"
+              },
+              "C:\\cfn\\modules\\AWSQuickStart.zip": {
+                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/AWSQuickStart.zip"
+              },
+              "C:\\cfn\\scripts\\Disable-CredSSP.ps1": {
+                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/Disable-CredSSP.ps1"
+              },
+              "C:\\cfn\\scripts\\Enable-CredSSP.ps1": {
+                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/Enable-CredSSP.ps1"
+              },
+              "C:\\cfn\\scripts\\Install-SSLCert.ps1": {
+                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/Install-SSLCert.ps1"
+              },
+              "C:\\cfn\\scripts\\Install-WAP-with-sslcert.ps1": {
+                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/Install-WAP-with-sslcert.ps1"
+              }
+            },
+            "commands": {
+              "a-set-execution-policy": {
+                "command": "powershell.exe -Command \"Set-ExecutionPolicy RemoteSigned -Force\"",
+                "waitAfterCompletion": "0"
+              },
+              "b-unpack-quickstart-module": {
+                "command": "powershell.exe -Command C:\\cfn\\scripts\\Unzip-Archive.ps1 -Source C:\\cfn\\modules\\AWSQuickStart.zip -Destination C:\\Windows\\system32\\WindowsPowerShell\\v1.0\\Modules\\",
+                "waitAfterCompletion": "0"
+              },
+              "c-init-quickstart-module": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "powershell.exe -Command \"",
+                      "New-AWSQuickStartWaitHandle -Handle '",
+                      {
+                        "Ref": "WAP2Handle"
+                      },
+                      "'\""
+                    ]
+                  ]
+                },
+                "waitAfterCompletion": "0"
+              }
+            },
+            "services": {
+              "windows": {
+                "cfn-hup": {
+                  "enabled": "true",
+                  "ensureRunning": "true",
+                  "files": [
+                    "C:\\cfn\\cfn-hup.conf",
+                    "C:\\cfn\\hooks.d\\cfn-auto-reloader.conf"
+                  ]
+                }
+              }
+            }
+          },
+          "install": {
+            "commands": {
+              "a-disable-win-fw": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "powershell.exe -Command \"Get-NetFirewallProfile | Set-NetFirewallProfile -Enabled False\""
+                    ]
+                  ]
+                },
+                "waitAfterCompletion": "0"
+              },
+              "b-rename-computer": {
+                "command": "powershell.exe -Command \"Rename-Computer -NewName 'WAP2' -Restart\"",
+                "waitAfterCompletion": "forever"
+              },
+              "c-install-ssl-cert": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "powershell.exe -Command \"C:\\cfn\\scripts\\Install-SSLCert.ps1 -CertURL '",
+                      {
+                        "Ref": "SSLCertUrl"
+                      },
+                      "' -CertPassword '",
+                      {
+                        "Ref": "SSLCertPass"
+                      },
+                      "'\""
+                    ]
+                  ]
+                },
+                "waitAfterCompletion": "15"
+              },
+              "d-enable-credssp": {
+                "command": "powershell.exe -ExecutionPolicy RemoteSigned -Command \"C:\\cfn\\scripts\\Enable-CredSSP.ps1",
+                "waitAfterCompletion": "0"
+              },
+              "e-install-wap": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "powershell.exe -Command \"C:\\cfn\\scripts\\Install-WAP-with-sslcert.ps1 -DomainDNSName '",
+                      {
+                        "Fn::ImportValue": {
+                          "Fn::Sub": "${Customer}DomainDNSName"
+                        }
+                      },
+                      "' -AdfsSvcUserPW '",
+                      {
+                        "Ref": "AdfsSvcUserPW"
+                      },
+                      "' -FederationServiceName '",
+                      {
+                        "Fn::ImportValue": {
+                          "Fn::Sub": "${Customer}Route53ZoneName"
+                        }
+                      },
+                      "'\""
+                    ]
+                  ]
+                },
+                "waitAfterCompletion": "0"
+              },
+              "f-reboot": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "powershell.exe -Command Restart-Computer -Force"
+                    ]
+                  ]
+                },
+                "waitAfterCompletion": "forever"
+              },
+              "g-disable-credssp": {
+                "command": "powershell.exe -ExecutionPolicy RemoteSigned -Command \"C:\\cfn\\scripts\\Disable-CredSSP.ps1\"",
+                "waitAfterCompletion": "0"
+              },
+              "h-signal-success": {
+                "command": "powershell -Command \"Write-AWSQuickStartStatus\"",
+                "waitAfterCompletion": "0"
+              }
+            }
+          }
+        }
+      },
+      "Properties": {
+        "BlockDeviceMappings": [{
+          "DeviceName": "/dev/sda1",
+          "Ebs": {
+            "VolumeType": "gp2",
+            "DeleteOnTermination": "true",
+            "VolumeSize": {
+              "Fn::If": [
+                "RootVolSizeCond",
+                {
+                  "Ref": "RootVolSize"
+                },
+                {
+                  "Ref": "AWS::NoValue"
+                }
+              ]
+            }
+          }
+        }],
+        "ImageId": {
+          "Ref": "AMIID"
+        },
+        "SubnetId": {
+          "Fn::ImportValue": "RestrictedBSubnet"
+        },
+        "SecurityGroupIds": [{
+            "Ref": "WAPSecurityGroup"
+          },
+          {
+            "Fn::ImportValue": {
+              "Fn::Sub": "${Customer}ManagementSecurityGroup"
+            }
+          }
+        ],
+        "InstanceType": {
+          "Ref": "InstanceType"
+        },
+        "KeyName": {
+          "Ref": "AWS::AccountId"
+        },
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Join": [
+              "",
+              [
+                "<script>\n",
+                "cfn-init.exe -v -c config -s ",
+                {
+                  "Ref": "AWS::StackId"
+                },
+                " -r WAP2 ",
+                " --region ",
+                {
+                  "Ref": "AWS::Region"
+                },
+                "\n",
+                "</script>"
+              ]
+            ]
+          }
+        },
+        "Tags": [{
+            "Key": "Name",
+            "Value": {
+              "Fn::If": [
+                "HasCustomer",
+                {
+                  "Fn::Sub": "${Customer}-WAP2"
+                },
+                "WAP2"
+              ]
+            }
+          },
+          {
+            "Key": "CostCentre",
+            "Value": {
+              "Ref": "CostCentreTag"
+            }
+          }
+        ]
+      }
+    },
+    "WAP2WaitCondition": {
+      "Type": "AWS::CloudFormation::WaitCondition",
+      "DependsOn": "WAP2",
+      "Properties": {
+        "Handle": {
+          "Ref": "WAP2Handle"
+        },
+        "Timeout": "3600"
+      }
+    },
+    "WAP2Handle": {
+      "Type": "AWS::CloudFormation::WaitConditionHandle"
+    },
+    "WAPELB": {
+      "Type": "AWS::ElasticLoadBalancing::LoadBalancer",
+      "DependsOn": "WAP2Handle",
+      "Properties": {
+        "Subnets": [{
+            "Fn::ImportValue": "ControlledASubnet"
+          },
+          {
+            "Fn::ImportValue": "ControlledBSubnet"
+          }
+        ],
+        "Scheme": "internet-facing",
+        "SecurityGroups": [{
+          "Ref": "WAPLoadBalancerSecurityGroup"
+        }],
+        "CrossZone": "true",
+        "Listeners": [{
+          "LoadBalancerPort": "443",
+          "InstancePort": "443",
+          "Protocol": "TCP"
+        }],
+        "Instances": [{
+            "Ref": "WAP1"
+          },
+          {
+            "Ref": "WAP2"
+          }
+        ],
+        "Tags": [{
+            "Key": "Name",
+            "Value": {
+              "Fn::If": [
+                "HasCustomer",
+                {
+                  "Fn::Sub": "${Customer}-WAPELB"
+                },
+                "WAPELB"
+              ]
+            }
+          },
+          {
+            "Key": "CostCentre",
+            "Value": {
+              "Ref": "CostCentreTag"
+            }
+          }
+        ]
+      }
+    },
+    "WAPDistribution": {
+      "Type": "AWS::CloudFront::Distribution",
+      "Properties": {
+        "DistributionConfig": {
+          "Aliases": [{
+            "Fn::ImportValue": {
+              "Fn::Sub": "${Customer}Route53ZoneName"
+            }
+          }],
+          "Origins": [{
+            "DomainName": {
+              "Fn::GetAtt": [
+                "WAPELB",
+                "DNSName"
+              ]
+            },
+            "Id": "WAP",
+            "CustomOriginConfig": {
+              "HTTPPort": "80",
+              "HTTPSPort": "443",
+              "OriginProtocolPolicy": "https-only"
+            }
+          }],
+          "Enabled": "true",
+          "Comment": "WAP Web Distribution",
+          "CustomErrorResponses": [{
+            "ErrorCode": "404",
+            "ResponsePagePath": "/error.html",
+            "ResponseCode": "404",
+            "ErrorCachingMinTTL": "30"
+          }],
+          "PriceClass": "PriceClass_All",
+          "HttpVersion": "http2",
+          "Restrictions": {
+            "GeoRestriction": {
+              "RestrictionType": "whitelist",
+              "Locations": [
+                "AU"
+              ]
+            }
+          },
+          "ViewerCertificate": {
+            "AcmCertificateArn": {
+              "Ref": "AcmCertificateArn"
+            },
+            "SslSupportMethod": "sni-only"
+          },
+          "DefaultCacheBehavior": {
+            "AllowedMethods": [
+              "DELETE",
+              "GET",
+              "HEAD",
+              "OPTIONS",
+              "PATCH",
+              "POST",
+              "PUT"
+            ],
+            "TargetOriginId": "WAP",
+            "ForwardedValues": {
+              "Cookies": {
+                "Forward": "all"
+              },
+              "Headers": [
+                "*"
+              ],
+              "QueryString": "true"
+            },
+            "ViewerProtocolPolicy": "redirect-to-https"
+          }
+        }
+      }
+    },
+    "InstanceAlertsTopic": {
+      "Type": "AWS::SNS::Topic",
+      "Properties": {
+        "TopicName": {
+          "Fn::Join": [
+            "",
+            [{
+                "Ref": "AWS::AccountId"
+              },
+              "-adfs-wap-alert",
+              {
+                "Fn::If": [
+                  "HasCustomer",
+                  {
+                    "Fn::Sub": "-${Customer}"
+                  },
+                  {
+                    "Ref": "AWS::NoValue"
+                  }
+                ]
+              }
+            ]
+          ]
+        },
+        "Subscription": [{
+          "Endpoint": {
+            "Ref": "Endpoint1"
+          },
+          "Protocol": "email"
+        }]
+      }
+    },
+    "ADFS1SystemStatusCheckAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Join": [
+            " ",
+            [
+              "System",
+              "Check",
+              "Recovery",
+              {
+                "Ref": "ADFS1"
+              }
+            ]
+          ]
+        },
+        "AlarmDescription": "Recover Instance if System Check Fails",
+        "AlarmActions": [{
+            "Fn::Join": [
+              "",
+              [
+                "arn:aws:automate:",
+                {
+                  "Ref": "AWS::Region"
+                },
+                ":ec2:recover"
+              ]
+            ]
+          },
+          {
+            "Ref": "InstanceAlertsTopic"
+          }
+        ],
+        "MetricName": "StatusCheckFailed_System",
+        "Namespace": "AWS/EC2",
+        "ComparisonOperator": "GreaterThanThreshold",
+        "EvaluationPeriods": "10",
+        "Period": "60",
+        "Statistic": "Sum",
+        "Threshold": "0",
+        "Dimensions": [{
+          "Name": "InstanceId",
+          "Value": {
+            "Ref": "ADFS1"
+          }
+        }]
+      }
+    },
+    "ADFS1InstanceStatusCheckAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Join": [
+            " ",
+            [
+              "Instance",
+              "Check",
+              "Recovery",
+              {
+                "Ref": "ADFS1"
+              }
+            ]
+          ]
+        },
+        "AlarmDescription": "Reboot Instance if Instance Status Check Fails",
+        "AlarmActions": [{
+            "Fn::Join": [
+              "",
+              [
+                "arn:aws:automate:",
+                {
+                  "Ref": "AWS::Region"
+                },
+                ":ec2:reboot"
+              ]
+            ]
+          },
+          {
+            "Ref": "InstanceAlertsTopic"
+          }
+        ],
+        "MetricName": "StatusCheckFailed_Instance",
+        "Namespace": "AWS/EC2",
+        "ComparisonOperator": "GreaterThanThreshold",
+        "EvaluationPeriods": "10",
+        "Period": "60",
+        "Statistic": "Sum",
+        "Threshold": "0",
+        "Dimensions": [{
+          "Name": "InstanceId",
+          "Value": {
+            "Ref": "ADFS1"
+          }
+        }]
+      }
+    },
+    "ADFS2SystemStatusCheckAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Join": [
+            " ",
+            [
+              "System",
+              "Check",
+              "Recovery",
+              {
+                "Ref": "ADFS2"
+              }
+            ]
+          ]
+        },
+        "AlarmDescription": "Recover Instance if System Check Fails",
+        "AlarmActions": [{
+            "Fn::Join": [
+              "",
+              [
+                "arn:aws:automate:",
+                {
+                  "Ref": "AWS::Region"
+                },
+                ":ec2:recover"
+              ]
+            ]
+          },
+          {
+            "Ref": "InstanceAlertsTopic"
+          }
+        ],
+        "MetricName": "StatusCheckFailed_System",
+        "Namespace": "AWS/EC2",
+        "ComparisonOperator": "GreaterThanThreshold",
+        "EvaluationPeriods": "10",
+        "Period": "60",
+        "Statistic": "Sum",
+        "Threshold": "0",
+        "Dimensions": [{
+          "Name": "InstanceId",
+          "Value": {
+            "Ref": "ADFS2"
+          }
+        }]
+      }
+    },
+    "ADFS2InstanceStatusCheckAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Join": [
+            " ",
+            [
+              "Instance",
+              "Check",
+              "Recovery",
+              {
+                "Ref": "ADFS2"
+              }
+            ]
+          ]
+        },
+        "AlarmDescription": "Reboot Instance if Instance Status Check Fails",
+        "AlarmActions": [{
+            "Fn::Join": [
+              "",
+              [
+                "arn:aws:automate:",
+                {
+                  "Ref": "AWS::Region"
+                },
+                ":ec2:reboot"
+              ]
+            ]
+          },
+          {
+            "Ref": "InstanceAlertsTopic"
+          }
+        ],
+        "MetricName": "StatusCheckFailed_Instance",
+        "Namespace": "AWS/EC2",
+        "ComparisonOperator": "GreaterThanThreshold",
+        "EvaluationPeriods": "10",
+        "Period": "60",
+        "Statistic": "Sum",
+        "Threshold": "0",
+        "Dimensions": [{
+          "Name": "InstanceId",
+          "Value": {
+            "Ref": "ADFS2"
+          }
+        }]
+      }
+    },
+    "WAP1SystemStatusCheckAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Join": [
+            " ",
+            [
+              "System",
+              "Check",
+              "Recovery",
+              {
+                "Ref": "WAP1"
+              }
+            ]
+          ]
+        },
+        "AlarmDescription": "Recover Instance if System Check Fails",
+        "AlarmActions": [{
+            "Fn::Join": [
+              "",
+              [
+                "arn:aws:automate:",
+                {
+                  "Ref": "AWS::Region"
+                },
+                ":ec2:recover"
+              ]
+            ]
+          },
+          {
+            "Ref": "InstanceAlertsTopic"
+          }
+        ],
+        "MetricName": "StatusCheckFailed_System",
+        "Namespace": "AWS/EC2",
+        "ComparisonOperator": "GreaterThanThreshold",
+        "EvaluationPeriods": "10",
+        "Period": "60",
+        "Statistic": "Sum",
+        "Threshold": "0",
+        "Dimensions": [{
+          "Name": "InstanceId",
+          "Value": {
+            "Ref": "WAP1"
+          }
+        }]
+      }
+    },
+    "WAP1InstanceStatusCheckAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Join": [
+            " ",
+            [
+              "Instance",
+              "Check",
+              "Recovery",
+              {
+                "Ref": "WAP1"
+              }
+            ]
+          ]
+        },
+        "AlarmDescription": "Reboot Instance if Instance Status Check Fails",
+        "AlarmActions": [{
+            "Fn::Join": [
+              "",
+              [
+                "arn:aws:automate:",
+                {
+                  "Ref": "AWS::Region"
+                },
+                ":ec2:reboot"
+              ]
+            ]
+          },
+          {
+            "Ref": "InstanceAlertsTopic"
+          }
+        ],
+        "MetricName": "StatusCheckFailed_Instance",
+        "Namespace": "AWS/EC2",
+        "ComparisonOperator": "GreaterThanThreshold",
+        "EvaluationPeriods": "10",
+        "Period": "60",
+        "Statistic": "Sum",
+        "Threshold": "0",
+        "Dimensions": [{
+          "Name": "InstanceId",
+          "Value": {
+            "Ref": "WAP1"
+          }
+        }]
+      }
+    },
+    "WAP2SystemStatusCheckAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Join": [
+            " ",
+            [
+              "System",
+              "Check",
+              "Recovery",
+              {
+                "Ref": "WAP2"
+              }
+            ]
+          ]
+        },
+        "AlarmDescription": "Recover Instance if System Check Fails",
+        "AlarmActions": [{
+            "Fn::Join": [
+              "",
+              [
+                "arn:aws:automate:",
+                {
+                  "Ref": "AWS::Region"
+                },
+                ":ec2:recover"
+              ]
+            ]
+          },
+          {
+            "Ref": "InstanceAlertsTopic"
+          }
+        ],
+        "MetricName": "StatusCheckFailed_System",
+        "Namespace": "AWS/EC2",
+        "ComparisonOperator": "GreaterThanThreshold",
+        "EvaluationPeriods": "10",
+        "Period": "60",
+        "Statistic": "Sum",
+        "Threshold": "0",
+        "Dimensions": [{
+          "Name": "InstanceId",
+          "Value": {
+            "Ref": "WAP2"
+          }
+        }]
+      }
+    },
+    "WAP2InstanceStatusCheckAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Join": [
+            " ",
+            [
+              "Instance",
+              "Check",
+              "Recovery",
+              {
+                "Ref": "WAP2"
+              }
+            ]
+          ]
+        },
+        "AlarmDescription": "Reboot Instance if Instance Status Check Fails",
+        "AlarmActions": [{
+            "Fn::Join": [
+              "",
+              [
+                "arn:aws:automate:",
+                {
+                  "Ref": "AWS::Region"
+                },
+                ":ec2:reboot"
+              ]
+            ]
+          },
+          {
+            "Ref": "InstanceAlertsTopic"
+          }
+        ],
+        "MetricName": "StatusCheckFailed_Instance",
+        "Namespace": "AWS/EC2",
+        "ComparisonOperator": "GreaterThanThreshold",
+        "EvaluationPeriods": "10",
+        "Period": "60",
+        "Statistic": "Sum",
+        "Threshold": "0",
+        "Dimensions": [{
+          "Name": "InstanceId",
+          "Value": {
+            "Ref": "WAP2"
+          }
+        }]
+      }
+    }
+  }
+}

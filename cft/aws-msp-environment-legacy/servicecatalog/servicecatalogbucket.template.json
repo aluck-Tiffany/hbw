@@ -1,0 +1,63 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Service Catalog S3 Bucket",
+  "Parameters": {
+    "BucketName": {
+      "Type": "String",
+      "Default": "mpl-servicecatalog",
+      "Description": "Required: Enter in S3 bucket name. Bucket name must be unique."
+    }
+  },
+  "Resources": {
+    "Bucket": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "BucketName": {
+           "Ref": "BucketName"
+        }
+      }
+    },
+    "BucketPolicy": {
+      "DependsOn": [
+        "Bucket"
+      ],
+      "Type": "AWS::S3::BucketPolicy",
+      "Properties": {
+        "Bucket": {
+           "Ref": "BucketName"
+        },
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": [
+                   "arn:aws:iam::247635153372:root",
+                   "arn:aws:iam::570732848925:root",
+                   "arn:aws:iam::689323978863:root",
+                   "arn:aws:iam::135977408364:root"
+                ]
+              },
+              "Action": [
+                "s3:GetObject"
+              ],
+              "Resource": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:aws:s3:::",
+                    {
+                      "Ref": "BucketName"
+                    },
+                    "/*"
+                  ]
+                ]
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

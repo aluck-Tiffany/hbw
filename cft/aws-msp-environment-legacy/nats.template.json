@@ -1,0 +1,242 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "NAT Instances",
+  "Parameters": {
+    "NATNodeInstanceType": {
+      "Type": "String",
+      "Default": "t2.micro"
+    },
+    "CostCentre": {
+      "Type": "String",
+      "Default": "management"
+    },
+    "ImageId": {
+      "Description": "NAT AMI Id",
+      "Type": "String",
+      "Default": "ami-ae714dcd"
+    }
+  },
+  "Resources": {
+    "ControlledANatEIP": {
+      "Type": "AWS::EC2::EIP",
+      "Properties": {
+        "Domain": "vpc",
+        "InstanceId": {
+          "Ref": "ControlledANatInstance"
+        }
+      }
+    },
+    "ControlledBNatEIP": {
+      "Type": "AWS::EC2::EIP",
+      "Properties": {
+        "Domain": "vpc",
+        "InstanceId": {
+          "Ref": "ControlledBNatInstance"
+        }
+      }
+    },
+    "ControlledCNatEIP": {
+      "Type": "AWS::EC2::EIP",
+      "Properties": {
+        "Domain": "vpc",
+        "InstanceId": {
+          "Ref": "ControlledCNatInstance"
+        }
+      }
+    },
+    "ControlledANatInstance": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "InstanceType": {
+          "Ref": "NATNodeInstanceType"
+        },
+        "SubnetId": {
+          "Fn::ImportValue": "ControlledASubnet"
+        },
+        "ImageId": {
+          "Ref": "ImageId"
+        },
+        "SecurityGroupIds": [
+          {
+            "Ref": "NATSecurityGroup"
+          }
+        ],
+        "SourceDestCheck": "false",
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "NAT #1"
+          },
+          {
+            "Key": "CostCentre",
+            "Value": {
+              "Ref": "CostCentre"
+            }
+          }
+        ]
+      }
+    },
+    "ControlledBNatInstance": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "InstanceType": {
+          "Ref": "NATNodeInstanceType"
+        },
+        "SubnetId": {
+          "Fn::ImportValue": "ControlledBSubnet"
+        },
+        "SourceDestCheck": "false",
+        "ImageId": {
+          "Ref": "ImageId"
+        },
+        "SecurityGroupIds": [
+          {
+            "Ref": "NATSecurityGroup"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "NAT #2"
+          },
+          {
+            "Key": "CostCentre",
+            "Value": {
+              "Ref": "CostCentre"
+            }
+          }
+        ]
+      }
+    },
+    "ControlledCNatInstance": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "InstanceType": {
+          "Ref": "NATNodeInstanceType"
+        },
+        "SubnetId": {
+          "Fn::ImportValue": "ControlledCSubnet"
+        },
+        "SourceDestCheck": "false",
+        "ImageId": {
+          "Ref": "ImageId"
+        },
+        "SecurityGroupIds": [
+          {
+            "Ref": "NATSecurityGroup"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "NAT #3"
+          },
+          {
+            "Key": "CostCentre",
+            "Value": {
+              "Ref": "CostCentre"
+            }
+          }
+        ]
+      }
+    },
+    "NATSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Rules for allowing access to HA Nodes",
+        "VpcId": {
+          "Fn::ImportValue": "VPC"
+        },
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "-1",
+            "FromPort": "0",
+            "ToPort": "65535",
+            "CidrIp": {
+              "Fn::ImportValue": "VPCCidrBlock"
+            }
+          }
+        ],
+        "SecurityGroupEgress": [
+          {
+            "IpProtocol": "-1",
+            "FromPort": "0",
+            "ToPort": "65535",
+            "CidrIp": "0.0.0.0/0"
+          }
+        ]
+      }
+    },
+    "RestrictedANATRoute": {
+      "Type": "AWS::EC2::Route",
+      "Properties": {
+        "RouteTableId": {
+          "Fn::ImportValue": "RestrictedARouteTable"
+        },
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "InstanceId": {
+          "Ref": "ControlledANatInstance"
+        }
+      }
+    },
+    "RestrictedBNATRoute": {
+      "Type": "AWS::EC2::Route",
+      "Properties": {
+        "RouteTableId": {
+          "Fn::ImportValue": "RestrictedBRouteTable"
+        },
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "InstanceId": {
+          "Ref": "ControlledBNatInstance"
+        }
+      }
+    },
+    "RestrictedCNATRoute": {
+      "Type": "AWS::EC2::Route",
+      "Properties": {
+        "RouteTableId": {
+          "Fn::ImportValue": "RestrictedCRouteTable"
+        },
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "InstanceId": {
+          "Ref": "ControlledCNatInstance"
+        }
+      }
+    },
+    "SecuredANATRoute": {
+      "Type": "AWS::EC2::Route",
+      "Properties": {
+        "RouteTableId": {
+          "Fn::ImportValue": "SecuredARouteTable"
+        },
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "InstanceId": {
+          "Ref": "ControlledANatInstance"
+        }
+      }
+    },
+    "SecuredBNATRoute": {
+      "Type": "AWS::EC2::Route",
+      "Properties": {
+        "RouteTableId": {
+          "Fn::ImportValue": "SecuredBRouteTable"
+        },
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "InstanceId": {
+          "Ref": "ControlledBNatInstance"
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "NATSecurityGroup": {
+      "Description": "NAT Instance Security Group",
+      "Value": {
+        "Ref": "NATSecurityGroup"
+      },
+      "Export": {
+        "Name": "NATSecurityGroup"
+      }
+    }
+  }
+}

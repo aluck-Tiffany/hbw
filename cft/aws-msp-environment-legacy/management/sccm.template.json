@@ -1,0 +1,173 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "SCCM",
+  "Parameters": {
+    "AWSKeyPairName": {
+      "Description": "Select an existing key pair to use for connecting to your SCCM Stack.",
+      "Type": "AWS::EC2::KeyPair::KeyName",
+      "MinLength": "1",
+      "MaxLength": "255",
+      "ConstraintDescription": "Select an existing EC2 Key Pair."
+    },
+    "CostCentre": {
+      "Type": "String",
+      "Description": "Enter Cost Centre"
+    },
+    "InstanceType": {
+      "Type": "String",
+      "Description": "Enter instance type",
+      "Default": "t2.micro"
+    },
+    "SQLInstanceType": {
+      "Type": "String",
+      "Description": "Enter instance type",
+      "Default": "m4.large"
+    },
+    "SCCMInstanceAMI": {
+      "Type": "String",
+      "Description": "Enter AMI ID"
+    },
+    "SQLInstanceAMI": {
+      "Type": "String",
+      "Description": "Enter AMI ID"
+    }
+  },
+  "Resources": {
+    "SCCMSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "SCCM",
+        "VpcId": {
+          "Fn::ImportValue": "VPC"
+        },
+        "SecurityGroupIngress": [
+          {
+            "CidrIp": "127.0.0.1/32",
+            "IpProtocol": "-1"
+          }
+        ]
+      }
+    },
+    "SCCMSecurityGroupIngress": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "GroupId": {
+          "Fn::GetAtt": [
+            "SCCMSecurityGroup",
+            "GroupId"
+          ]
+        },
+        "IpProtocol": "-1",
+        "FromPort": "-1",
+        "SourceSecurityGroupId": {
+          "Fn::GetAtt": [
+            "SCCMSecurityGroup",
+            "GroupId"
+          ]
+        }
+      }
+    },
+    "SQL1": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "ImageId": {
+          "Ref": "SQLInstanceAMI"
+        },
+        "InstanceType": {
+          "Ref": "SQLInstanceType"
+        },
+        "KeyName": {
+          "Ref": "AWSKeyPairName"
+        },
+        "SubnetId": {
+          "Fn::ImportValue": "RestrictedASubnet"
+        },
+        "SecurityGroupIds": [
+          {
+            "Fn::GetAtt": [
+              "SCCMSecurityGroup",
+              "GroupId"
+            ]
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "SCCM SQL"
+          },
+          {
+            "Key": "CostCentre",
+            "Value": {
+              "Ref": "CostCentre"
+            }
+          }
+        ],
+        "BlockDeviceMappings": [
+          {
+            "DeviceName": "/dev/sda1",
+            "Ebs": {
+              "VolumeSize": "50"
+            }
+          },
+          {
+            "DeviceName": "/dev/sdm",
+            "Ebs": {
+              "VolumeSize": "100"
+            }
+          }
+        ]
+      }
+    },
+    "SCCM1": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "ImageId": {
+          "Ref": "SCCMInstanceAMI"
+        },
+        "InstanceType": {
+          "Ref": "InstanceType"
+        },
+        "KeyName": {
+          "Ref": "AWSKeyPairName"
+        },
+        "SubnetId": {
+          "Fn::ImportValue": "RestrictedASubnet"
+        },
+        "SecurityGroupIds": [
+          {
+            "Fn::GetAtt": [
+              "SCCMSecurityGroup",
+              "GroupId"
+            ]
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "SCCM"
+          },
+          {
+            "Key": "CostCentre",
+            "Value": {
+              "Ref": "CostCentre"
+            }
+          }
+        ],
+        "BlockDeviceMappings": [
+          {
+            "DeviceName": "/dev/sda1",
+            "Ebs": {
+              "VolumeSize": "50"
+            }
+          },
+          {
+            "DeviceName": "/dev/sdm",
+            "Ebs": {
+              "VolumeSize": "100"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

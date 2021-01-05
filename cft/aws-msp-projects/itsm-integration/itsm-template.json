@@ -1,0 +1,72 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "ITSM Integration",
+  "Parameters": {
+    "Environment": {
+      "Type": "String",
+      "AllowedValues": [
+        "PROD",
+        "DEV"
+      ],
+      "Default": "PROD"
+    }
+  },
+  "Mappings": {
+    "Environment": {
+      "PROD": {
+        "AccountId": "158564055550"
+      },
+      "DEV": {
+        "AccountId": "760584908251"
+      }
+    }
+  },
+  "Resources": {
+    "CloudWatch": {
+      "Type": "AWS::Events::Rule",
+      "Properties": {
+        "Description": "ITSM Integration",
+        "EventPattern": {
+          "source": [
+            "aws.ec2"
+          ],
+          "detail-type": [
+            "AWS API Call via CloudTrail"
+          ],
+          "detail": {
+            "eventSource": [
+              "ec2.amazonaws.com"
+            ],
+            "eventName": [
+              "RunInstances",
+              "TerminateInstances"
+            ]
+          }
+        },
+        "Targets": [
+          {
+            "Arn": {
+              "Fn::Sub": [
+                "arn:aws:events:ap-southeast-2:${AccountId}:event-bus/default",
+                {
+                  "AccountId": {
+                    "Fn::FindInMap": [
+                      "Environment",
+                      {
+                        "Ref": "Environment"
+                      },
+                      "AccountId"
+                    ]
+                  }
+                }
+              ]
+            },
+            "Id": {
+              "Ref": "AWS::StackName"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

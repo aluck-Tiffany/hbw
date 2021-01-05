@@ -1,0 +1,331 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Base IAM Roles for SSO",
+  "Parameters": {
+    "SamlProvider": {
+      "Type": "String",
+      "Default": "datacom"
+    },
+    "EnterpriseSupport": {
+      "Type": "String",
+      "Default": "false",
+      "AllowedValues": [
+        "true",
+        "false"
+      ]
+    },
+    "AutoScalingServicelinkedRoleParam": {
+      "Type": "String",
+      "Default": "true",
+      "AllowedValues": [
+        "true",
+        "false"
+      ]
+    }
+  },
+  "Conditions": {
+    "isEnterpriseSupport": {
+      "Fn::Equals": [
+        {
+          "Ref": "EnterpriseSupport"
+        },
+        "true"
+      ]
+    },
+    "CreateAutoScalingServicelinkedRole": {
+      "Fn::Equals": [
+        {
+          "Ref": "AutoScalingServicelinkedRoleParam"
+        },
+        "true"
+      ]
+    }
+  },
+  "Resources": {
+    "Admin": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Federated": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:aws:iam::",
+                      {
+                        "Ref": "AWS::AccountId"
+                      },
+                      ":saml-provider/",
+                      {
+                        "Ref": "SamlProvider"
+                      }
+                    ]
+                  ]
+                }
+              },
+              "Action": "sts:AssumeRoleWithSAML",
+              "Condition": {
+                "StringEquals": {
+                  "SAML:aud": "https://signin.aws.amazon.com/saml"
+                }
+              }
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/AdministratorAccess"
+        ],
+        "RoleName": "admin"
+      }
+    },
+    "PowerUser": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Federated": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:aws:iam::",
+                      {
+                        "Ref": "AWS::AccountId"
+                      },
+                      ":saml-provider/",
+                      {
+                        "Ref": "SamlProvider"
+                      }
+                    ]
+                  ]
+                }
+              },
+              "Action": "sts:AssumeRoleWithSAML",
+              "Condition": {
+                "StringEquals": {
+                  "SAML:aud": "https://signin.aws.amazon.com/saml"
+                }
+              }
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/AdministratorAccess"
+        ],
+        "Policies": [
+          {
+            "PolicyName": "deny-iam",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Deny",
+                  "Action": [
+                    "iam:Add*",
+                    "iam:Attach*",
+                    "iam:Change*",
+                    "iam:Create*",
+                    "iam:Deactivate*",
+                    "iam:Delete*",
+                    "iam:Detach*",
+                    "iam:Enable*",
+                    "iam:Generate*",
+                    "iam:Pass*",
+                    "iam:Put*",
+                    "iam:Remove*",
+                    "iam:Resync*",
+                    "iam:Set*",
+                    "iam:Simulate*",
+                    "iam:Update*"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          },
+          {
+            "Fn::If": [
+              "isEnterpriseSupport",
+              {
+                "PolicyName": "deny-support",
+                "PolicyDocument": {
+                  "Version": "2012-10-17",
+                  "Statement": [
+                    {
+                      "Effect": "Deny",
+                      "Action": "support:*",
+                      "Resource": "*"
+                    }
+                  ]
+                }
+              },
+              {
+                "Ref": "AWS::NoValue"
+              }
+            ]
+          }
+        ],
+        "RoleName": "poweruser"
+      }
+    },
+    "InstanceOps": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Federated": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:aws:iam::",
+                      {
+                        "Ref": "AWS::AccountId"
+                      },
+                      ":saml-provider/",
+                      {
+                        "Ref": "SamlProvider"
+                      }
+                    ]
+                  ]
+                }
+              },
+              "Action": "sts:AssumeRoleWithSAML",
+              "Condition": {
+                "StringEquals": {
+                  "SAML:aud": "https://signin.aws.amazon.com/saml"
+                }
+              }
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/AmazonEC2FullAccess",
+          "arn:aws:iam::aws:policy/ReadOnlyAccess",
+          "arn:aws:iam::aws:policy/AWSServiceCatalogEndUserFullAccess"
+        ],
+        "Policies": [
+          {
+            "PolicyName": "cloudformation",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "cloudformation:*"
+                  ],
+                  "Resource": [
+                    "*"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "Fn::If": [
+              "isEnterpriseSupport",
+              {
+                "PolicyName": "deny-support",
+                "PolicyDocument": {
+                  "Version": "2012-10-17",
+                  "Statement": [
+                    {
+                      "Effect": "Deny",
+                      "Action": "support:*",
+                      "Resource": "*"
+                    }
+                  ]
+                }
+              },
+              {
+                "Ref": "AWS::NoValue"
+              }
+            ]
+          }
+        ],
+        "RoleName": "instanceops"
+      }
+    },
+    "ReadOnly": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Federated": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:aws:iam::",
+                      {
+                        "Ref": "AWS::AccountId"
+                      },
+                      ":saml-provider/",
+                      {
+                        "Ref": "SamlProvider"
+                      }
+                    ]
+                  ]
+                }
+              },
+              "Action": "sts:AssumeRoleWithSAML",
+              "Condition": {
+                "StringEquals": {
+                  "SAML:aud": "https://signin.aws.amazon.com/saml"
+                }
+              }
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/ReadOnlyAccess"
+        ],
+        "Policies": [
+          {
+            "Fn::If": [
+              "isEnterpriseSupport",
+              {
+                "PolicyName": "deny-support",
+                "PolicyDocument": {
+                  "Version": "2012-10-17",
+                  "Statement": [
+                    {
+                      "Effect": "Deny",
+                      "Action": "support:*",
+                      "Resource": "*"
+                    }
+                  ]
+                }
+              },
+              {
+                "Ref": "AWS::NoValue"
+              }
+            ]
+          }
+        ],
+        "RoleName": "readonly"
+      }
+    },
+    "AutoScalingServicelinkedRole": {
+      "Type": "AWS::IAM::ServiceLinkedRole",
+      "Condition": "CreateAutoScalingServicelinkedRole",
+      "Properties": {
+        "AWSServiceName": "autoscaling.amazonaws.com"
+      }
+    }
+  }
+}

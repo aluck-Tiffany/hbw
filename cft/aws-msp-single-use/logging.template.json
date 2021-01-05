@@ -1,0 +1,291 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Logging Resources",
+  "Parameters": {
+    "Endpoint": {
+      "Type": "String",
+      "Default": ""
+    }
+  },
+  "Conditions": {
+    "HasEndpoint": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "Endpoint"
+            },
+            ""
+          ]
+        }
+      ]
+    }
+  },
+  "Resources": {
+    "Bucket": {
+      "Type": "AWS::S3::Bucket",
+      "DeletionPolicy": "Retain",
+      "Properties": {
+        "BucketName": {
+          "Fn::Join": [
+            "",
+            [
+              {
+                "Ref": "AWS::AccountId"
+              },
+              "-logs"
+            ]
+          ]
+        },
+        "VersioningConfiguration": {
+          "Status": "Enabled"
+        },
+        "LifecycleConfiguration": {
+          "Rules": [
+            {
+              "Status": "Enabled",
+              "Transitions": [
+                {
+                  "TransitionInDays": "90",
+                  "StorageClass": "GLACIER"
+                }
+              ],
+              "ExpirationInDays": "9125"
+            }
+          ]
+        }
+      }
+    },
+    "BucketPolicy": {
+      "DependsOn": [
+        "Bucket"
+      ],
+      "Type": "AWS::S3::BucketPolicy",
+      "Properties": {
+        "Bucket": {
+          "Fn::Join": [
+            "",
+            [
+              {
+                "Ref": "AWS::AccountId"
+              },
+              "-logs"
+            ]
+          ]
+        },
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [
+                  "cloudtrail.amazonaws.com",
+                  "config.amazonaws.com"
+                ]
+              },
+              "Action": "s3:GetBucketAcl",
+              "Resource": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:aws:s3:::",
+                    {
+                      "Ref": "AWS::AccountId"
+                    },
+                    "-logs"
+                  ]
+                ]
+              }
+            },
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [
+                  "cloudtrail.amazonaws.com",
+                  "config.amazonaws.com"
+                ]
+              },
+              "Action": "s3:PutObject",
+              "Resource": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:aws:s3:::",
+                    {
+                      "Ref": "AWS::AccountId"
+                    },
+                    "-logs/*"
+                  ]
+                ]
+              },
+              "Condition": {
+                "StringEquals": {
+                  "s3:x-amz-acl": "bucket-owner-full-control"
+                }
+              }
+            },
+            {
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "s3:*",
+              "Resource": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:aws:s3:::",
+                    {
+                      "Ref": "AWS::AccountId"
+                    },
+                    "-logs/*"
+                  ]
+                ]
+              },
+              "Condition": {
+                "Bool": {
+                  "aws:SecureTransport": false
+                }
+              }
+            },
+            {
+              "Effect": "Deny",
+              "NotPrincipal": {
+                "AWS": [
+                  {
+                    "Fn::Join": [
+                      "",
+                      [
+                        "arn:aws:iam::",
+                        {
+                          "Ref": "AWS::AccountId"
+                        },
+                        ":root"
+                      ]
+                    ]
+                  }
+                ]
+              },
+              "Action": [
+                "s3:Delete*",
+                "s3:Put*"
+              ],
+              "Resource": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:aws:s3:::",
+                    {
+                      "Ref": "AWS::AccountId"
+                    },
+                    "-logs"
+                  ]
+                ]
+              }
+            },
+            {
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": [
+                "s3:Delete*"
+              ],
+              "Resource": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:aws:s3:::",
+                    {
+                      "Ref": "AWS::AccountId"
+                    },
+                    "-logs/*"
+                  ]
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "Topic": {
+      "Type": "AWS::SNS::Topic",
+      "Properties": {
+        "TopicName": {
+          "Fn::Join": [
+            "",
+            [
+              {
+                "Ref": "AWS::AccountId"
+              },
+              "-config"
+            ]
+          ]
+        },
+        "Subscription": {
+          "Fn::If": [
+            "HasEndpoint",
+            [
+              {
+                "Endpoint": {
+                  "Ref": "Endpoint"
+                },
+                "Protocol": "https"
+              }
+            ],
+            {
+              "Ref": "AWS::NoValue"
+            }
+          ]
+        }
+      }
+    },
+    "TopicPolicy": {
+      "Type": "AWS::SNS::TopicPolicy",
+      "Properties": {
+        "PolicyDocument": {
+          "Id": {
+            "Fn::Join": [
+              "",
+              [
+                {
+                  "Ref": "AWS::AccountId"
+                },
+                "-config"
+              ]
+            ]
+          },
+          "Statement": [
+            {
+              "Sid": {
+                "Fn::Join": [
+                  "",
+                  [
+                    {
+                      "Ref": "AWS::AccountId"
+                    },
+                    "-config"
+                  ]
+                ]
+              },
+              "Action": [
+                "SNS:Publish"
+              ],
+              "Effect": "Allow",
+              "Resource": {
+                "Ref": "Topic"
+              },
+              "Principal": {
+                "Service": [
+                  "config.amazonaws.com"
+                ]
+              }
+            }
+          ]
+        },
+        "Topics": [
+          {
+            "Ref": "Topic"
+          }
+        ]
+      }
+    }
+  }
+}

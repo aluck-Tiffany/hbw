@@ -1,0 +1,131 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Private Hosted Zone for Datacom MSP",
+  "Parameters": {
+    "VPCIdentifier": {
+      "Type": "String",
+      "Description": "Specify the VPC Identifier - This is only to be used if more than one VPC is being deployed into the account",
+      "Default": ""
+    },
+    "FederationServiceName": {
+      "Description": "CloudFront Distribution Alternate Domain Name without ending period (Public DNS Record)",
+      "Type": "String"
+    },
+    "TrendELBName": {
+      "Description": "Name of Trend ELB",
+      "Type": "String"
+    },
+    "TrendELBHostedZoneID": {
+      "Description": "Trend ELB Hosted ZOne ID",
+      "Type": "String"
+    }
+  },
+  "Conditions": {
+    "HasTrendELB": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "TrendELBName"
+            },
+            ""
+          ]
+        }
+      ]
+    }
+  },
+  "Resources": {
+    "Route53HostedZone": {
+      "Type": "AWS::Route53::HostedZone",
+      "Properties": {
+        "HostedZoneConfig": {
+          "Comment": "Private Hosted Zone for Datacom MSP"
+        },
+        "Name": {
+          "Fn::Join": [
+            "",
+            [
+              {
+                "Ref": "FederationServiceName"
+              },
+              "."
+            ]
+          ]
+        },
+        "VPCs": [
+          {
+            "VPCId": {
+              "Fn::ImportValue": {
+                "Fn::Sub": "VPC${VPCIdentifier}"
+              }
+            },
+            "VPCRegion": {
+              "Ref": "AWS::Region"
+            }
+          }
+        ],
+        "HostedZoneTags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Ref": "FederationServiceName"
+            }
+          }
+        ]
+      }
+    },
+    "TrendRoute53Record": {
+      "Condition": "HasTrendELB",
+      "Type": "AWS::Route53::RecordSetGroup",
+      "Properties": {
+        "HostedZoneId": {
+          "Ref": "Route53HostedZone"
+        },
+        "Comment": "Trend DNS Record",
+        "RecordSets": [
+          {
+            "Name": {
+              "Fn::Sub": "trend.${FederationServiceName}."
+            },
+            "Type": "A",
+            "AliasTarget": {
+              "HostedZoneId": {
+                "Ref": "TrendELBHostedZoneID"
+              },
+              "DNSName": {
+                "Ref": "TrendELBName"
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "Route53HostedZone": {
+      "Description": "Private Route 53 Zone Id",
+      "Value": {
+        "Ref": "Route53HostedZone"
+      },
+      "Export": {
+        "Name": "Route53HostedZone"
+      }
+    },
+    "Route53ZoneName": {
+      "Description": "Private Route 53 Zone Name",
+      "Value": {
+        "Fn::Join": [
+          "",
+          [
+            {
+              "Ref": "FederationServiceName"
+            }
+          ]
+        ]
+      },
+      "Export": {
+        "Name": "Route53ZoneName"
+      }
+    }
+  }
+}

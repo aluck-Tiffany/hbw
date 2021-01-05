@@ -1,0 +1,561 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Alerts",
+  "Parameters": {
+    "Endpoint": {
+      "Type": "String"
+    },
+    "Environment": {
+      "Type": "String"
+    },
+    "EnableWarnings": {
+      "Type": "String",
+      "Default": "true"
+    }
+  },
+  "Conditions": {
+    "Warning": {
+      "Fn::Equals": [
+        {
+          "Ref": "EnableWarnings"
+        },
+        "true"
+      ]
+    }
+  },
+  "Resources": {
+    "Topic": {
+      "Type": "AWS::SNS::Topic",
+      "Properties": {
+        "TopicName": {
+          "Fn::Join": [
+            "",
+            [
+              {
+                "Ref": "AWS::AccountId"
+              },
+              "-alerts"
+            ]
+          ]
+        },
+        "Subscription": [
+          {
+            "Endpoint": {
+              "Ref": "Endpoint"
+            },
+            "Protocol": "email"
+          }
+        ]
+      }
+    },
+    "IAMPolicyChangesMetricFilter": {
+      "Type": "AWS::Logs::MetricFilter",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Join": [
+            "",
+            [
+              {
+                "Ref": "AWS::AccountId"
+              },
+              "-cloudtrail"
+            ]
+          ]
+        },
+        "FilterPattern": "{($.eventName=DeleteGroupPolicy)||($.eventName=DeleteRolePolicy)||($.eventName=DeleteUserPolicy)||($.eventName=PutGroupPolicy)||($.eventName=PutRolePolicy)||($.eventName=PutUserPolicy)||($.eventName=CreatePolicy)||($.eventName=DeletePolicy)||($.eventName=CreatePolicyVersion)||($.eventName=DeletePolicyVersion)||($.eventName=AttachRolePolicy)||($.eventName=DetachRolePolicy)||($.eventName=AttachUserPolicy)||($.eventName=DetachUserPolicy)||($.eventName=AttachGroupPolicy)||($.eventName=DetachGroupPolicy)}",
+        "MetricTransformations": [
+          {
+            "MetricNamespace": "CloudTrailMetrics",
+            "MetricName": "IAMPolicyEventCount",
+            "MetricValue": "1"
+          }
+        ]
+      }
+    },
+    "NetworkAclChangesMetricFilter": {
+      "Type": "AWS::Logs::MetricFilter",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Join": [
+            "",
+            [
+              {
+                "Ref": "AWS::AccountId"
+              },
+              "-cloudtrail"
+            ]
+          ]
+        },
+        "FilterPattern": "{ ($.eventName = CreateNetworkAcl) || ($.eventName = CreateNetworkAclEntry) || ($.eventName = DeleteNetworkAcl) || ($.eventName = DeleteNetworkAclEntry) || ($.eventName = ReplaceNetworkAclEntry) || ($.eventName = ReplaceNetworkAclAssociation) }",
+        "MetricTransformations": [
+          {
+            "MetricNamespace": "CloudTrailMetrics",
+            "MetricName": "NetworkAclEventCount",
+            "MetricValue": "1"
+          }
+        ]
+      }
+    },
+    "SecurityGroupChangesMetricFilter": {
+      "Type": "AWS::Logs::MetricFilter",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Join": [
+            "",
+            [
+              {
+                "Ref": "AWS::AccountId"
+              },
+              "-cloudtrail"
+            ]
+          ]
+        },
+        "FilterPattern": "{ ($.eventName = AuthorizeSecurityGroupIngress) || ($.eventName = AuthorizeSecurityGroupEgress) || ($.eventName = RevokeSecurityGroupIngress) || ($.eventName = RevokeSecurityGroupEgress) || ($.eventName = CreateSecurityGroup) || ($.eventName = DeleteSecurityGroup) }",
+        "MetricTransformations": [
+          {
+            "MetricNamespace": "CloudTrailMetrics",
+            "MetricName": "SecurityGroupEventCount",
+            "MetricValue": "1"
+          }
+        ]
+      }
+    },
+    "IAMRootActivityMetricFilter": {
+      "Type": "AWS::Logs::MetricFilter",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Join": [
+            "",
+            [
+              {
+                "Ref": "AWS::AccountId"
+              },
+              "-cloudtrail"
+            ]
+          ]
+        },
+        "FilterPattern": "{ ($.userIdentity.type=Root) && ($.eventName=ConsoleLogin) }",
+        "MetricTransformations": [
+          {
+            "MetricNamespace": "CloudTrailMetrics",
+            "MetricName": "RootUserPolicyEventCount",
+            "MetricValue": "1"
+          }
+        ]
+      }
+    },
+    "IAMActivityMetricFilter": {
+      "Type": "AWS::Logs::MetricFilter",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Join": [
+            "",
+            [
+              {
+                "Ref": "AWS::AccountId"
+              },
+              "-cloudtrail"
+            ]
+          ]
+        },
+        "FilterPattern": "{ ($.userIdentity.type=IAMUser) && ($.eventName=ConsoleLogin) }",
+        "MetricTransformations": [
+          {
+            "MetricNamespace": "CloudTrailMetrics",
+            "MetricName": "IAMUserPolicyEventCount",
+            "MetricValue": "1"
+          }
+        ]
+      }
+    },
+    "UnauthorizedAttemptsMetricFilter": {
+      "Type": "AWS::Logs::MetricFilter",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Join": [
+            "",
+            [
+              {
+                "Ref": "AWS::AccountId"
+              },
+              "-cloudtrail"
+            ]
+          ]
+        },
+        "FilterPattern": {
+          "Fn::Join": [
+            "",
+            [
+              "{(($.errorCode=AccessDenied)||($.errorCode=UnauthorizedOperation))&&($.userIdentity.arn!=\"arn:aws:sts::",
+              {
+                "Ref": "AWS::AccountId"
+              },
+              ":assumed-role/CloudCheckr/CloudCheckr\")}"
+            ]
+          ]
+        },
+        "MetricTransformations": [
+          {
+            "MetricNamespace": "CloudTrailMetrics",
+            "MetricName": "UnauthorizedAttemptCount",
+            "MetricValue": "1"
+          }
+        ]
+      }
+    },
+    "IAMCreateAccessKeyMetricFilter": {
+      "Type": "AWS::Logs::MetricFilter",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Join": [
+            "",
+            [
+              {
+                "Ref": "AWS::AccountId"
+              },
+              "-cloudtrail"
+            ]
+          ]
+        },
+        "FilterPattern": "{($.eventName=CreateAccessKey)}",
+        "MetricTransformations": [
+          {
+            "MetricNamespace": "CloudTrailMetrics",
+            "MetricName": "NewAccessKeyCreated",
+            "MetricValue": "1"
+          }
+        ]
+      }
+    },
+    "CloudTrailChangeMetricFilter": {
+      "Type": "AWS::Logs::MetricFilter",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Join": [
+            "",
+            [
+              {
+                "Ref": "AWS::AccountId"
+              },
+              "-cloudtrail"
+            ]
+          ]
+        },
+        "FilterPattern": "{ ($.eventName = CreateTrail) || ($.eventName = UpdateTrail) || ($.eventName = DeleteTrail) || ($.eventName = StartLogging) || ($.eventName = StopLogging) }",
+        "MetricTransformations": [
+          {
+            "MetricNamespace": "CloudTrailMetrics",
+            "MetricName": "CloudTrailChangeCount",
+            "MetricValue": "1"
+          }
+        ]
+      }
+    },
+    "GatewayChangesMetricFilter": {
+      "Type": "AWS::Logs::MetricFilter",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Join": [
+            "",
+            [
+              {
+                "Ref": "AWS::AccountId"
+              },
+              "-cloudtrail"
+            ]
+          ]
+        },
+        "FilterPattern": "{ ($.eventName = CreateCustomerGateway) || ($.eventName = DeleteCustomerGateway) || ($.eventName = AttachInternetGateway) || ($.eventName = CreateInternetGateway) || ($.eventName = DeleteInternetGateway) || ($.eventName = DetachInternetGateway) }",
+        "MetricTransformations": [
+          {
+            "MetricNamespace": "CloudTrailMetrics",
+            "MetricName": "GatewayEventCount",
+            "MetricValue": "1"
+          }
+        ]
+      }
+    },
+    "GatewayChangesAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Join": [
+            " ",
+            [
+              "CRITICAL",
+              {
+                "Ref": "Environment"
+              },
+              "Customer or IGW Gateway Changes"
+            ]
+          ]
+        },
+        "AlarmDescription": "Create, update or delete a Customer or Internet Gateway.",
+        "AlarmActions": [
+          {
+            "Ref": "Topic"
+          }
+        ],
+        "MetricName": "GatewayEventCount",
+        "Namespace": "CloudTrailMetrics",
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "EvaluationPeriods": "1",
+        "Period": "300",
+        "Statistic": "Sum",
+        "Threshold": "1"
+      }
+    },
+    "NetworkAclChangesAlarm": {
+      "DependsOn": "GatewayChangesAlarm",
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Join": [
+            " ",
+            [
+              "CRITICAL",
+              {
+                "Ref": "Environment"
+              },
+              "NACL Change"
+            ]
+          ]
+        },
+        "AlarmDescription": "Create, update or delete a Network ACL.",
+        "AlarmActions": [
+          {
+            "Ref": "Topic"
+          }
+        ],
+        "MetricName": "NetworkAclEventCount",
+        "Namespace": "CloudTrailMetrics",
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "EvaluationPeriods": "1",
+        "Period": "300",
+        "Statistic": "Sum",
+        "Threshold": "1"
+      }
+    },
+    "RootActivityAlarm": {
+      "DependsOn": "NetworkAclChangesAlarm",
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Join": [
+            " ",
+            [
+              "CRITICAL",
+              {
+                "Ref": "Environment"
+              },
+              "Root User Console Login"
+            ]
+          ]
+        },
+        "AlarmDescription": "Root user console login detected",
+        "AlarmActions": [
+          {
+            "Ref": "Topic"
+          }
+        ],
+        "MetricName": "RootUserPolicyEventCount",
+        "Namespace": "CloudTrailMetrics",
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "EvaluationPeriods": "1",
+        "Period": "300",
+        "Statistic": "Sum",
+        "Threshold": "1"
+      }
+    },
+    "IAMCreateAccessKeyAlarm": {
+      "DependsOn": "RootActivityAlarm",
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Join": [
+            " ",
+            [
+              "CRITICAL",
+              {
+                "Ref": "Environment"
+              },
+              "Access Key Creation"
+            ]
+          ]
+        },
+        "AlarmDescription": "IAM access key was created",
+        "AlarmActions": [
+          {
+            "Ref": "Topic"
+          }
+        ],
+        "MetricName": "NewAccessKeyCreated",
+        "Namespace": "CloudTrailMetrics",
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "EvaluationPeriods": "1",
+        "Period": "300",
+        "Statistic": "Sum",
+        "Threshold": "1"
+      }
+    },
+    "CloudTrailChangeAlarm": {
+      "DependsOn": "IAMCreateAccessKeyAlarm",
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Join": [
+            " ",
+            [
+              "CRITICAL",
+              {
+                "Ref": "Environment"
+              },
+              "CloudTrail Changes"
+            ]
+          ]
+        },
+        "AlarmDescription": "Changes to CloudTrail log configuration detected",
+        "AlarmActions": [
+          {
+            "Ref": "Topic"
+          }
+        ],
+        "MetricName": "CloudTrailChangeCount",
+        "Namespace": "CloudTrailMetrics",
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "EvaluationPeriods": "1",
+        "Period": "300",
+        "Statistic": "Sum",
+        "Threshold": "1"
+      }
+    },
+    "SecurityGroupChangesAlarm": {
+      "DependsOn": "CloudTrailChangeAlarm",
+      "Condition": "Warning",
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Join": [
+            " ",
+            [
+              "WARNING",
+              {
+                "Ref": "Environment"
+              },
+              "Security Group Change"
+            ]
+          ]
+        },
+        "AlarmDescription": "Create, update or delete a Security Group.",
+        "AlarmActions": [
+          {
+            "Ref": "Topic"
+          }
+        ],
+        "MetricName": "SecurityGroupEventCount",
+        "Namespace": "CloudTrailMetrics",
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "EvaluationPeriods": "1",
+        "Period": "300",
+        "Statistic": "Sum",
+        "Threshold": "1"
+      }
+    },
+    "IAMActivityAlarm": {
+      "DependsOn": "SecurityGroupChangesAlarm",
+      "Condition": "Warning",
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Join": [
+            " ",
+            [
+              "WARNING",
+              {
+                "Ref": "Environment"
+              },
+              "IAM User (Non SSO) Console Login"
+            ]
+          ]
+        },
+        "AlarmDescription": "IAM user (non SSO) console login detected",
+        "AlarmActions": [
+          {
+            "Ref": "Topic"
+          }
+        ],
+        "MetricName": "IAMUserPolicyEventCount",
+        "Namespace": "CloudTrailMetrics",
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "EvaluationPeriods": "1",
+        "Period": "300",
+        "Statistic": "Sum",
+        "Threshold": "1"
+      }
+    },
+    "UnauthorizedAttemptAlarm": {
+      "DependsOn": "IAMActivityAlarm",
+      "Condition": "Warning",
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Join": [
+            " ",
+            [
+              "WARNING",
+              {
+                "Ref": "Environment"
+              },
+              "Multiple Unauthorized Actions or Logins"
+            ]
+          ]
+        },
+        "AlarmDescription": "Multiple unauthorized actions or logins attempted",
+        "AlarmActions": [
+          {
+            "Ref": "Topic"
+          }
+        ],
+        "MetricName": "UnauthorizedAttemptCount",
+        "Namespace": "CloudTrailMetrics",
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "EvaluationPeriods": "1",
+        "Period": "300",
+        "Statistic": "Sum",
+        "Threshold": "5"
+      }
+    },
+    "IAMPolicyChangesAlarm": {
+      "DependsOn": "UnauthorizedAttemptAlarm",
+      "Condition": "Warning",
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Join": [
+            " ",
+            [
+              "WARNING",
+              {
+                "Ref": "Environment"
+              },
+              "IAM Policy Changes"
+            ]
+          ]
+        },
+        "AlarmDescription": "IAM policy changes detected",
+        "AlarmActions": [
+          {
+            "Ref": "Topic"
+          }
+        ],
+        "MetricName": "IAMPolicyEventCount",
+        "Namespace": "CloudTrailMetrics",
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "EvaluationPeriods": "1",
+        "Period": "300",
+        "Statistic": "Sum",
+        "Threshold": "1"
+      }
+    }
+  }
+}

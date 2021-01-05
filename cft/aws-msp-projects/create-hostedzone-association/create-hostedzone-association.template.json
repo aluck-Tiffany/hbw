@@ -1,0 +1,136 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Associate Hosted Zone with Peered Accounts",
+    "Parameters": {
+        "CICDBucket": {
+            "Type": "String"
+        },
+        "CreateHostedZoneAssociationVersion": {
+            "Type": "String"
+        },
+        "HostedZoneId": {
+            "Type": "String",
+            "Default": ""
+        }
+    },
+    "Conditions": {
+        "HasHostedZoneId": {
+            "Fn::Not": [
+                {
+                    "Fn::Equals": [
+                        {
+                            "Ref": "HostedZoneId"
+                        },
+                        ""
+                    ]
+                }
+            ]
+        }
+    },
+    "Resources": {
+        "FunctionRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": "lambda.amazonaws.com"
+                            },
+                            "Action": "sts:AssumeRole"
+                        }
+                    ]
+                },
+                "ManagedPolicyArns": [
+                    "arn:aws:iam::aws:policy/AdministratorAccess"
+                ]
+            }
+        },
+        "CreateHostedZoneAssociation": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Code": {
+                    "S3Bucket": {
+                        "Ref": "CICDBucket"
+                    },
+                    "S3Key": {
+                        "Fn::Sub": "aws-msp-projects/create-hostedzone-association/${CreateHostedZoneAssociationVersion}/function.zip"
+                    }
+                },
+                "Handler": "index.handler",
+                "MemorySize": 128,
+                "Role": {
+                    "Fn::GetAtt": [
+                        "FunctionRole",
+                        "Arn"
+                    ]
+                },
+                "Runtime": "nodejs6.10",
+                "Timeout": 30,
+                "Environment": {
+                    "Variables": {
+                        "hostedZoneId": {
+                            "Fn::If": [
+                                "HasHostedZoneId",
+                                {
+                                    "Ref": "HostedZoneId"
+                                },
+                                {
+                                    "Fn::ImportValue": "HostedZoneId"
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "Permission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "CreateHostedZoneAssociation"
+                },
+                "SourceArn": {
+                    "Fn::GetAtt": [
+                        "Rule",
+                        "Arn"
+                    ]
+                },
+                "Principal": "events.amazonaws.com"
+            }
+        },
+        "Rule": {
+            "Type": "AWS::Events::Rule",
+            "Properties": {
+                "EventPattern": {
+                    "detail-type": [
+                        "AWS API Call via CloudTrail"
+                    ],
+                    "detail": {
+                        "eventSource": [
+                            "ec2.amazonaws.com"
+                        ],
+                        "eventName": [
+                            "AcceptVpcPeeringConnection"
+                        ]
+                    }
+                },
+                "Name": "create-hostedzone-association",
+                "Targets": [
+                    {
+                        "Arn": {
+                            "Fn::GetAtt": [
+                                "CreateHostedZoneAssociation",
+                                "Arn"
+                            ]
+                        },
+                        "Id": "create-hostedzone-association"
+                    }
+                ]
+            }
+        }
+    }
+}

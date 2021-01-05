@@ -1,0 +1,695 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Restore EC2 snapshots for file restores",
+  "Parameters": {
+    "OSType": {
+      "Type": "String",
+      "Default": "Windows",
+      "AllowedValues": [
+        "Windows",
+        "Linux"
+      ],
+      "Description": "Required: Enter OS type that the snapshots were taken from. Default is Windows."
+    },
+    "RestoreUserPassword": {
+      "NoEcho": "true",
+      "Description": "Required: The local user password to access instance. Must contain 1 uppercase, 1 lowercase and 1 number and 8 characters long",
+      "Type": "String",
+      "Default": "Qwerty123!",
+      "MinLength": "8",
+      "MaxLength": "41",
+      "AllowedPattern": "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[$@$!%*?&])[A-Za-z\\d$@$!%*?&]{8,}"
+    },
+    "Snapshot1": {
+      "Type": "String",
+      "Default": "snap-940457a2",
+      "Description": "Required: Enter in 1st Snapshot ID eg snap-xxxxxxxxxxxxxxxxx"
+    },
+    "Snapshot2": {
+      "Type": "String",
+      "Default": "",
+      "Description": "Optional: Enter in 2nd Snapshot ID eg snap-xxxxxxxxxxxxxxxxx"
+    },
+    "Snapshot3": {
+      "Type": "String",
+      "Default": "",
+      "Description": "Optional: Enter in 3rd Snapshot ID eg snap-xxxxxxxxxxxxxxxxx"
+    },
+    "Snapshot4": {
+      "Type": "String",
+      "Default": "",
+      "Description": "Optional: Enter in 4th Snapshot ID eg snap-xxxxxxxxxxxxxxxxx"
+    },
+    "Snapshot5": {
+      "Type": "String",
+      "Default": "",
+      "Description": "Optional: Enter in 5th Snapshot ID eg snap-xxxxxxxxxxxxxxxxx"
+    }
+  },
+  "Metadata" : {
+    "AWS::CloudFormation::Interface" : {
+      "ParameterGroups" : [
+        {
+          "Label" : {
+            "default" : "Recovery Instance Configuration"
+          },
+          "Parameters" : [
+            "OSType",
+            "RestoreUserPassword"
+          ]
+        },
+        {
+          "Label" : {
+            "default" : "Snapshots to be recovered"
+          },
+          "Parameters" : [
+            "Snapshot1",
+            "Snapshot2",
+            "Snapshot3",
+            "Snapshot4",
+            "Snapshot5"
+          ]
+        }
+      ]
+    }
+  },
+  "Conditions": {
+    "IsWindows": {
+      "Fn::Equals": [
+        {
+          "Ref": "OSType"
+        },
+        "Windows"
+      ]
+    },
+    "CreateVolume1": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "Snapshot1"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "CreateVolume2": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "Snapshot2"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "CreateVolume3": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "Snapshot3"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "CreateVolume4": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "Snapshot4"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "CreateVolume5": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "Snapshot5"
+            },
+            ""
+          ]
+        }
+      ]
+    }
+  },
+  "Mappings": {
+    "OSAMIMAP": {
+      "ap-southeast-2": {
+        "Windows": "ami-37526954",
+        "Linux": "ami-28cff44b"
+      }
+    },
+    "AccountIDToVPCSubnet": {
+      "AccountId": {
+        "689323978863": "subnet-5df6322a",
+        "575658093553": "subnet-7b11df0d"
+      }
+    },
+    "AccountIDToSecurityGroup": {
+      "AccountId": {
+        "689323978863": "sg-2bf2464f",
+        "575658093553": "sg-93200af7"
+      }
+    }
+  },
+  "Resources": {
+    "LambdaSnapCostCentreRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [
+                  "lambda.amazonaws.com"
+                ]
+              },
+              "Action": [
+                "sts:AssumeRole"
+              ]
+            }
+          ]
+        },
+        "Path": "/",
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+        ],
+        "Policies": [
+          {
+            "PolicyName": "root",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "ec2:describetags"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "GetCostCentreFunction": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Handler": "index.handler",
+        "Role": {
+          "Fn::GetAtt": [
+            "LambdaSnapCostCentreRole",
+            "Arn"
+          ]
+        },
+        "Runtime": "rodejs4.3",
+        "Timeout": "30",
+        "Code": {
+          "ZipFile": {
+            "Fn::Join": [
+              "\n",
+              [
+                "\"use strict\";var AWS=require(\"aws-sdk\"),response=require(\"cfn-response\");exports.handler=function(e,s,r){var o=null,n=new AWS.EC2,t={Filters:[{Name:\"resource-id\",Values:[e.ResourceProperties.SnapshotId]}]};n.describeTags(t,function(r,n){if(r)console.log(r,r.stack),response.send(e,s,response.FAILED);else{console.log(n);var t=!0,a=!1,l=void 0;try{for(var p,c=n.Tags[Symbol.iterator]();!(t=(p=c.next()).done);t=!0){var i=p.value;\"CostCentre\"===i.Key&&(o=i.Value)}}catch(e){a=!0,l=e}finally{try{!t&&c.return&&c.return()}finally{if(a)throw l}}o?response.send(e,s,response.SUCCESS,{CostCentre:o}):(console.log(\"Snapshot \"+e.ResourceProperties.SnapshotId+\" does not have a costcentre! Please Apply CostCentre tag and value to snapshot.\"),response.send(e,s,response.FAILED))}})};"
+              ]
+            ]
+          }
+        }
+      }
+    },
+    "CostCentreSnapshot1": {
+      "Type": "Custom::CostCentre",
+      "Properties": {
+        "ServiceToken": {
+          "Fn::GetAtt": [
+            "GetCostCentreFunction",
+            "Arn"
+          ]
+        },
+        "SnapshotId": {
+          "Ref": "Snapshot1"
+        }
+      }
+    },
+    "CostCentreSnapshot2": {
+      "Type": "Custom::CostCentre",
+      "Condition": "CreateVolume2",
+      "Properties": {
+        "ServiceToken": {
+          "Fn::GetAtt": [
+            "GetCostCentreFunction",
+            "Arn"
+          ]
+        },
+        "SnapshotId": {
+          "Ref": "Snapshot2"
+        }
+      }
+    },
+    "CostCentreSnapshot3": {
+      "Type": "Custom::CostCentre",
+      "Condition": "CreateVolume3",
+      "Properties": {
+        "ServiceToken": {
+          "Fn::GetAtt": [
+            "GetCostCentreFunction",
+            "Arn"
+          ]
+        },
+        "SnapshotId": {
+          "Ref": "Snapshot3"
+        }
+      }
+    },
+    "CostCentreSnapshot4": {
+      "Type": "Custom::CostCentre",
+      "Condition": "CreateVolume4",
+      "Properties": {
+        "ServiceToken": {
+          "Fn::GetAtt": [
+            "GetCostCentreFunction",
+            "Arn"
+          ]
+        },
+        "SnapshotId": {
+          "Ref": "Snapshot4"
+        }
+      }
+    },
+    "CostCentreSnapshot5": {
+      "Type": "Custom::CostCentre",
+      "Condition": "CreateVolume5",
+      "Properties": {
+        "ServiceToken": {
+          "Fn::GetAtt": [
+            "GetCostCentreFunction",
+            "Arn"
+          ]
+        },
+        "SnapshotId": {
+          "Ref": "Snapshot5"
+        }
+      }
+    },
+    "Volume1": {
+      "Type": "AWS::EC2::Volume",
+      "Properties": {
+        "AvailabilityZone": {
+          "Fn::GetAtt": [
+            "EC2Instance",
+            "AvailabilityZone"
+          ]
+        },
+        "SnapshotId": {
+          "Ref": "Snapshot1"
+        },
+        "VolumeType": "gp2",
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "Volume1Restore"
+          },
+          {
+            "Key": "CostCentre",
+            "Value": {
+              "Fn::GetAtt": [
+                "CostCentreSnapshot1",
+                "CostCentre"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "Volume2": {
+      "Type": "AWS::EC2::Volume",
+      "Condition": "CreateVolume2",
+      "Properties": {
+        "AvailabilityZone": {
+          "Fn::GetAtt": [
+            "EC2Instance",
+            "AvailabilityZone"
+          ]
+        },
+        "SnapshotId": {
+          "Ref": "Snapshot2"
+        },
+        "VolumeType": "gp2",
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "Volume2Restore"
+          },
+          {
+            "Key": "CostCentre",
+            "Value": {
+              "Fn::GetAtt": [
+                "CostCentreSnapshot2",
+                "CostCentre"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "Volume3": {
+      "Type": "AWS::EC2::Volume",
+      "Condition": "CreateVolume3",
+      "Properties": {
+        "AvailabilityZone": {
+          "Fn::GetAtt": [
+            "EC2Instance",
+            "AvailabilityZone"
+          ]
+        },
+        "SnapshotId": {
+          "Ref": "Snapshot3"
+        },
+        "VolumeType": "gp2",
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "Volume3Restore"
+          },
+          {
+            "Key": "CostCentre",
+            "Value": {
+              "Fn::GetAtt": [
+                "CostCentreSnapshot3",
+                "CostCentre"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "Volume4": {
+      "Type": "AWS::EC2::Volume",
+      "Condition": "CreateVolume4",
+      "Properties": {
+        "AvailabilityZone": {
+          "Fn::GetAtt": [
+            "EC2Instance",
+            "AvailabilityZone"
+          ]
+        },
+        "SnapshotId": {
+          "Ref": "Snapshot4"
+        },
+        "VolumeType": "gp2",
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "Volume4Restore"
+          },
+          {
+            "Key": "CostCentre",
+            "Value": {
+              "Fn::GetAtt": [
+                "CostCentreSnapshot4",
+                "CostCentre"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "Volume5": {
+      "Type": "AWS::EC2::Volume",
+      "Condition": "CreateVolume5",
+      "Properties": {
+        "AvailabilityZone": {
+          "Fn::GetAtt": [
+            "EC2Instance",
+            "AvailabilityZone"
+          ]
+        },
+        "SnapshotId": {
+          "Ref": "Snapshot5"
+        },
+        "VolumeType": "gp2",
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "Volume5Restore"
+          },
+          {
+            "Key": "CostCentre",
+            "Value": {
+              "Fn::GetAtt": [
+                "CostCentreSnapshot5",
+                "CostCentre"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "EC2Instance": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "ImageId": {
+          "Fn::FindInMap": [
+            "OSAMIMAP",
+            {
+              "Ref": "AWS::Region"
+            },
+            {
+              "Ref": "OSType"
+            }
+          ]
+        },
+        "InstanceType": "t2.medium",
+        "SecurityGroupIds": [
+          {
+            "Fn::FindInMap": [
+              "AccountIDToSecurityGroup",
+              "AccountId",
+              {
+                "Ref": "AWS::AccountId"
+              }
+            ]
+          }
+        ],
+        "SubnetId": {
+          "Fn::FindInMap": [
+            "AccountIDToVPCSubnet",
+            "AccountId",
+            {
+              "Ref": "AWS::AccountId"
+            }
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::If": [
+                "IsWindows",
+                "RestoreSnapWindows-Instance",
+                "RestoreSnapLinux-Instance"
+              ]
+            }
+          },
+          {
+            "Key": "CostCentre",
+            "Value": {
+              "Fn::GetAtt": [
+                "CostCentreSnapshot1",
+                "CostCentre"
+              ]
+            }
+          },
+          {
+            "Key": "Availability",
+            "Value": "{\"availability\": \"24x7\"}"
+          }
+        ],
+        "UserData": {
+          "Fn::If": [
+            "IsWindows",
+            {
+              "Fn::Base64": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "<powershell>\n",
+                    "$computername = $env:computername \n",
+                    "$username = 'restoreuser' \n",
+                    "$password = '",
+                    {
+                      "Ref": "RestoreUserPassword"
+                    },
+                    "'\n",
+                    "$desc = 'Automatically created local restore user admin account'\n",
+                    "$computer = [ADSI]\"WinNT://$computername,computer\"\n",
+                    "$user = $computer.Create(\"user\", $username)\n",
+                    "$user.SetPassword($password)\n",
+                    "$user.Setinfo()\n",
+                    "$user.description = $desc\n",
+                    "$user.setinfo()\n",
+                    "$user.UserFlags = 65536\n",
+                    "$user.SetInfo()\n",
+                    "$group = [ADSI](\"WinNT://$computername/administrators,group\")\n",
+                    "$group.add(\"WinNT://$username,user\")\n",
+                    "Rename-Computer -NewName 'restoresvr' -ComputerName $computername -restart -force \n",
+                    "</powershell>"
+                  ]
+                ]
+              }
+            },
+            {
+              "Fn::Base64": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "#!/bin/bash\n",
+                    "sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config \n",
+                    "service sshd reload \n",
+                    "useradd -m -d /home/restoreuser restoreuser \n",
+                    "usermod -p $(echo \"",
+                    {
+                      "Ref": "RestoreUserPassword"
+                    },
+                    "\" | openssl passwd -1 -stdin) restoreuser \n",
+                    "echo \"restoreuser ALL=(ALL) NOPASSWD:ALL\" > /etc/sudoers.d/restoresudo"
+                  ]
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "MountVolume1": {
+      "Type": "AWS::EC2::VolumeAttachment",
+      "Properties": {
+        "InstanceId": {
+          "Ref": "EC2Instance"
+        },
+        "VolumeId": {
+          "Ref": "Volume1"
+        },
+        "Device": "/dev/xvdf"
+      }
+    },
+    "MountVolume2": {
+      "Type": "AWS::EC2::VolumeAttachment",
+      "Condition": "CreateVolume2",
+      "Properties": {
+        "InstanceId": {
+          "Ref": "EC2Instance"
+        },
+        "VolumeId": {
+          "Ref": "Volume2"
+        },
+        "Device": "/dev/xvdg"
+      }
+    },
+    "MountVolume3": {
+      "Type": "AWS::EC2::VolumeAttachment",
+      "Condition": "CreateVolume3",
+      "Properties": {
+        "InstanceId": {
+          "Ref": "EC2Instance"
+        },
+        "VolumeId": {
+          "Ref": "Volume3"
+        },
+        "Device": "/dev/xvdh"
+      }
+    },
+    "MountVolume4": {
+      "Type": "AWS::EC2::VolumeAttachment",
+      "Condition": "CreateVolume4",
+      "Properties": {
+        "InstanceId": {
+          "Ref": "EC2Instance"
+        },
+        "VolumeId": {
+          "Ref": "Volume4"
+        },
+        "Device": "/dev/xvdi"
+      }
+    },
+    "MountVolume5": {
+      "Type": "AWS::EC2::VolumeAttachment",
+      "Condition": "CreateVolume5",
+      "Properties": {
+        "InstanceId": {
+          "Ref": "EC2Instance"
+        },
+        "VolumeId": {
+          "Ref": "Volume5"
+        },
+        "Device": "/dev/xvdj"
+      }
+    }
+  },
+  "Outputs": {
+    "EC2InstanceIpAddress": {
+      "Description": "IP Address of EC2 Instance",
+      "Value": {
+        "Fn::GetAtt": [
+          "EC2Instance",
+          "PrivateIp"
+        ]
+      }
+    },
+    "EC2InstanceRestoreUser": {
+      "Description": "Restore User Name",
+      "Value": "restoreuser"
+    },
+    "EC2ConnectionDetails": {
+      "Description": "Instance Connection details",
+      "Value": {
+        "Fn::If": [
+          "IsWindows",
+          {
+            "Fn::Join": [
+              "",
+              [
+                "RDP Connection details: ",
+                {
+                  "Fn::GetAtt": [
+                    "EC2Instance",
+                    "PrivateIp"
+                  ]
+                },
+                " User: restoresvr\\restoreuser"
+              ]
+            ]
+          },
+          {
+            "Fn::Join": [
+              "",
+              [
+                "SSH Connection details: ",
+                {
+                  "Fn::GetAtt": [
+                    "EC2Instance",
+                    "PrivateIp"
+                  ]
+                },
+                " User: restoreuser"
+              ]
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

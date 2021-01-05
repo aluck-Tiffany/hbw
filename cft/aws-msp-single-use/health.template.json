@@ -1,0 +1,172 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Metadata" : {
+    "Description" : "Creates EC2 Health Event Notifications with a Lambda target that sends to a subscribed SNS Topic"
+  },
+  "Description": "EC2 Health Events",
+  "Parameters": {
+    "Customer": {
+      "Type": "String",
+      "Default": "<Customer> - EC2 Health Notification",
+      "Description": "Specify the customer name - This will be in the subject of the email (to be logged in Jira)"
+    },
+    "SNSTopic": {
+      "Type": "String",
+      "Default": "arn:aws:sns:ap-southeast-2:760584908251:health",
+      "Description": "Specify the email address where the events will be sent - Jira is the default so a ticket is created"
+    }
+  },
+  "Resources": {
+    "CloudWatchEventsRule": {
+      "Type": "AWS::Events::Rule",
+      "Properties": {
+        "Description": "Sends EC2 Health Event Notifications to a Lambda target",
+        "EventPattern": {
+          "source": [
+            "aws.health"
+          ],
+          "detail-type": [
+            "AWS Health Event"
+          ],
+          "detail": {
+            "service": [
+              "EC2"
+            ],
+            "eventTypeCategory": [
+              "scheduledChange"
+            ]
+          }
+        },
+        "Name": "EC2-Events",
+        "State": "ENABLED",
+        "Targets": [
+          {
+            "Arn": {
+              "Fn::GetAtt": [
+                "EC2LambdaEvent",
+                "Arn"
+              ]
+            },
+            "Id": "TargetLambdaV1"
+          }
+        ]
+      }
+    },
+    "EC2LambdaEvent": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Code": {
+          "ZipFile": {
+            "Fn::Join": [
+              "",
+              [
+                "console.log('Loading function');",
+                "var AWS = require('aws-sdk');",
+                "AWS.config.region = 'ap-southeast-2';",
+                "exports.handler = function(event, context) {",
+                "console.log('Received event:', JSON.stringify(event, null, 2));",
+                "var sns = new AWS.SNS();",
+                "var snsmessage = `This notification is from ${event[\"detail-type\"]} \n Account: ${event.account} \n Region: ${event.region} \n Resources: ${event.resources} \n Service: ${event[\"detail\"][\"service\"]} \n Catagory: ${event[\"detail\"][\"eventTypeCategory\"]} \n StartTime: ${event[\"detail\"][\"startTime\"]} \n EndTime: ${event[\"detail\"][\"endTime\"]} \n Description: ${event.detail.eventDescription[0].latestDescription} `;",
+                "console.log(event.detail);",
+                "sns.publish({",
+                "Message: snsmessage,",
+                "Subject: '",
+                {
+                  "Ref": "Customer"
+                },
+                "',TopicArn: '",
+                {
+                  "Ref": "SNSTopic"
+                },
+                "'}, function(err, data) {",
+                "if (err) {",
+                "console.log(err.stack);",
+                "return;",
+                "}",
+                "console.log('push sent');",
+                "console.log(data);",
+                "context.done(null, 'Function Finished!');",
+                "});",
+                "};"
+              ]
+            ]
+          }
+        },
+        "Description": "Receives EC2 Health events from CloudWatch and forwards them to SNS",
+        "FunctionName": "EC2-Events",
+        "Handler": "index.handler",
+        "MemorySize": "256",
+        "Role": {
+          "Fn::GetAtt": [
+            "LambdaSNSIAMRole",
+            "Arn"
+          ]
+        },
+        "Runtime": "nodejs6.10",
+        "Timeout": "20"
+      }
+    },
+    "LambdaSNSIAMRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": "Lambda-SNS-IAM",
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [
+                  "lambda.amazonaws.com"
+                ]
+              },
+              "Action": [
+                "sts:AssumeRole"
+              ]
+            }
+          ]
+        },
+        "Path": "/",
+        "Policies": [
+          {
+            "PolicyName": "Lambda-SNS-IAM",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "*"
+                  ],
+                  "Resource": [
+                    "arn:aws:sns:*:*:*",
+                    "arn:aws:logs:*:*:*"
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "TriggerLambdaPermission": {
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "Action": "lambda:InvokeFunction",
+        "FunctionName": {
+          "Fn::GetAtt": [
+            "EC2LambdaEvent",
+            "Arn"
+          ]
+        },
+        "Principal": "events.amazonaws.com",
+        "SourceArn": {
+          "Fn::GetAtt": [
+            "CloudWatchEventsRule",
+            "Arn"
+          ]
+        }
+      }
+    }
+  }
+}

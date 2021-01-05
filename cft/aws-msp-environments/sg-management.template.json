@@ -1,0 +1,856 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Security Group for Management Clients",
+  "Parameters": {
+    "ActiveDirectorySecurityGroup": {
+      "Description": "Required: ID of the Domain Controller Security Group",
+      "Type": "String"
+    },
+    "JumpHostSecurityGroup": {
+      "Description": "Required: ID of the Jump Host Security Group",
+      "Type": "String"
+    },
+    "TrendMicroSecurityGroup": {
+      "Description": "Required: ID of the Trend Micro Security Group",
+      "Type": "String"
+    },
+    "WSUSSecurityGroup": {
+      "Description": "Required: ID of the WSUS Security Group",
+      "Type": "String"
+    },
+    "SCOMSecurityGroup": {
+      "Description": "Required: ID of the SCOM Security Group",
+      "Type": "String"
+    },
+    "PRTGSecurityGroup": {
+      "Description": "Required: ID of the PRTG Security Group",
+      "Type": "String"
+    },
+    "VPCIdentifier": {
+      "Type": "String",
+      "Description": "Optional: VPC Identifier - This is only to be used if more than one VPC is deployed into the account",
+      "Default": ""
+    },
+    "Customer": {
+      "Type": "String",
+      "Description": "Optional: Customer Name - This is only to be used in management account if mutiple customers share one management account",
+      "Default": ""
+    }
+  },
+  "Conditions": {
+    "HasActiveDirectorySecurityGroup": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "ActiveDirectorySecurityGroup"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "HasJumpHostSecurityGroup": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "JumpHostSecurityGroup"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "HasTrendMicroSecurityGroup": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "TrendMicroSecurityGroup"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "HasWSUSSecurityGroup": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "WSUSSecurityGroup"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "HasSCOMSecurityGroup": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "SCOMSecurityGroup"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "HasPRTGSecurityGroup": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "PRTGSecurityGroup"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "HasCustomer": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "Customer"
+            },
+            ""
+          ]
+        }
+      ]
+    }
+  },
+  "Resources": {
+    "ManagementSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Management Clients",
+        "VpcId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "VPC${VPCIdentifier}"
+          }
+        },
+        "SecurityGroupIngress": [
+          {
+            "CidrIp": "127.0.0.1/32",
+            "IpProtocol": "-1"
+          }
+        ],
+        "SecurityGroupEgress": [
+          {
+            "CidrIp": "127.0.0.1/32",
+            "IpProtocol": "-1"
+          }
+        ]
+      }
+    },
+    "JumpHostRDP": {
+      "Condition": "HasJumpHostSecurityGroup",
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "Description": "Jump Host RDP",
+        "SourceSecurityGroupId": {
+          "Ref": "JumpHostSecurityGroup"
+        },
+        "IpProtocol": "TCP",
+        "FromPort": "3389",
+        "ToPort": "3389",
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "JumpHostSSH": {
+      "Condition": "HasJumpHostSecurityGroup",
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "Description": "Jump Host SSH",
+        "SourceSecurityGroupId": {
+          "Ref": "JumpHostSecurityGroup"
+        },
+        "IpProtocol": "TCP",
+        "FromPort": "22",
+        "ToPort": "22",
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "JumpHostHTTPS": {
+      "Condition": "HasJumpHostSecurityGroup",
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "Description": "Jump Host HTTPS",
+        "SourceSecurityGroupId": {
+          "Ref": "JumpHostSecurityGroup"
+        },
+        "IpProtocol": "TCP",
+        "FromPort": "443",
+        "ToPort": "443",
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "SCOMTCPOUT": {
+      "Condition": "HasSCOMSecurityGroup",
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "Description": "SCOM TCP Outbound",
+        "DestinationSecurityGroupId": {
+          "Ref": "SCOMSecurityGroup"
+        },
+        "IpProtocol": "TCP",
+        "FromPort": "5723",
+        "ToPort": "5723",
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "SCOMUDPOUT": {
+      "Condition": "HasSCOMSecurityGroup",
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "Description": "SCOM UDP Outbound",
+        "DestinationSecurityGroupId": {
+          "Ref": "SCOMSecurityGroup"
+        },
+        "IpProtocol": "UDP",
+        "FromPort": "5723",
+        "ToPort": "5723",
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "SCOMTCPIN": {
+      "Condition": "HasSCOMSecurityGroup",
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "Description": "SCOM TCP Inbound",
+        "SourceSecurityGroupId": {
+          "Ref": "ManagementSecurityGroup"
+        },
+        "IpProtocol": "TCP",
+        "FromPort": "5723",
+        "ToPort": "5723",
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "SCOMUDPIN": {
+      "Condition": "HasSCOMSecurityGroup",
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "Description": "SCOM UDP Inbound",
+        "SourceSecurityGroupId": {
+          "Ref": "ManagementSecurityGroup"
+        },
+        "IpProtocol": "UDP",
+        "FromPort": "5723",
+        "ToPort": "5723",
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "PRTGUDPOUT": {
+      "Condition": "HasPRTGSecurityGroup",
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "Description": "PRTG UDP Outbound 162",
+        "DestinationSecurityGroupId": {
+          "Ref": "PRTGSecurityGroup"
+        },
+        "IpProtocol": "UDP",
+        "FromPort": "162",
+        "ToPort": "162",
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "PRTGUDPIN": {
+      "Condition": "HasPRTGSecurityGroup",
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "Description": "PRTG UDP Inbound 161",
+        "SourceSecurityGroupId": {
+          "Ref": "PRTGSecurityGroup"
+        },
+        "IpProtocol": "UDP",
+        "FromPort": "161",
+        "ToPort": "161",
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "PRTGTCPINSQL": {
+      "Condition": "HasPRTGSecurityGroup",
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "Description": "PRTG UDP Inbound 1433-1434",
+        "SourceSecurityGroupId": {
+          "Ref": "PRTGSecurityGroup"
+        },
+        "IpProtocol": "TCP",
+        "FromPort": "1433",
+        "ToPort": "1433",
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "PRTGTCPINSMB": {
+      "Condition": "HasPRTGSecurityGroup",
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "Description": "PRTG UDP Inbound 1433-1434",
+        "SourceSecurityGroupId": {
+          "Ref": "PRTGSecurityGroup"
+        },
+        "IpProtocol": "TCP",
+        "FromPort": "445",
+        "ToPort": "445",
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "PRTGTCPINNetBios": {
+      "Condition": "HasPRTGSecurityGroup",
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "Description": "PRTG UDP Inbound 1433-1434",
+        "SourceSecurityGroupId": {
+          "Ref": "PRTGSecurityGroup"
+        },
+        "IpProtocol": "TCP",
+        "FromPort": "139",
+        "ToPort": "139",
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "PRTGTCPINSSH": {
+      "Condition": "HasPRTGSecurityGroup",
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "Description": "PRTG TCP Inbound 22",
+        "SourceSecurityGroupId": {
+          "Ref": "PRTGSecurityGroup"
+        },
+        "IpProtocol": "TCP",
+        "FromPort": "22",
+        "ToPort": "22",
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "PRTGPINGIN": {
+      "Condition": "HasPRTGSecurityGroup",
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "Description": "PRTG TCP Inbound Ping",
+        "SourceSecurityGroupId": {
+          "Ref": "PRTGSecurityGroup"
+        },
+        "IpProtocol": "ICMP",
+        "FromPort": "-1",
+        "ToPort": "-1",
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "WSUSDefault": {
+      "Condition": "HasWSUSSecurityGroup",
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "Description": "WSUS",
+        "IpProtocol": "TCP",
+        "FromPort": "80",
+        "ToPort": "80",
+        "DestinationSecurityGroupId": {
+          "Ref": "WSUSSecurityGroup"
+        },
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "WSUS": {
+      "Condition": "HasWSUSSecurityGroup",
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "Description": "WSUS",
+        "IpProtocol": "TCP",
+        "FromPort": "8530",
+        "ToPort": "8531",
+        "DestinationSecurityGroupId": {
+          "Ref": "WSUSSecurityGroup"
+        },
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "TrendMicro": {
+      "Condition": "HasTrendMicroSecurityGroup",
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "Description": "Trend Micro",
+        "DestinationSecurityGroupId": {
+          "Ref": "TrendMicroSecurityGroup"
+        },
+        "IpProtocol": "TCP",
+        "FromPort": "4120",
+        "ToPort": "4122",
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "InternetHTTPS": {
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "Description": "Internet HTTPS",
+        "CidrIp": "0.0.0.0/0",
+        "IpProtocol": "TCP",
+        "FromPort": "443",
+        "ToPort": "443",
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "InternetHTTP": {
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "Description": "Internet HTTPS",
+        "CidrIp": "0.0.0.0/0",
+        "IpProtocol": "TCP",
+        "FromPort": "80",
+        "ToPort": "80",
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "InternetNTPUDP": {
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "Description": "Internet NTP",
+        "CidrIp": "0.0.0.0/0",
+        "IpProtocol": "UDP",
+        "FromPort": "123",
+        "ToPort": "123",
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "InternetNTPTCP": {
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "Description": "Internet NTP",
+        "CidrIp": "0.0.0.0/0",
+        "IpProtocol": "TCP",
+        "FromPort": "123",
+        "ToPort": "123",
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "ADRPC": {
+      "Condition": "HasActiveDirectorySecurityGroup",
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "Description": "RPC Endpoint Mapper",
+        "IpProtocol": "TCP",
+        "FromPort": "135",
+        "ToPort": "135",
+        "DestinationSecurityGroupId": {
+          "Ref": "ActiveDirectorySecurityGroup"
+        },
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "ADRPCUDP": {
+      "Condition": "HasActiveDirectorySecurityGroup",
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "Description": "RPC Endpoint Mapper",
+        "IpProtocol": "UDP",
+        "FromPort": "135",
+        "ToPort": "135",
+        "DestinationSecurityGroupId": {
+          "Ref": "ActiveDirectorySecurityGroup"
+        },
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "ADNetBIOS": {
+      "Condition": "HasActiveDirectorySecurityGroup",
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "Description": "NetBIOS Name Service",
+        "IpProtocol": "TCP",
+        "FromPort": "137",
+        "ToPort": "137",
+        "DestinationSecurityGroupId": {
+          "Ref": "ActiveDirectorySecurityGroup"
+        },
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "ADNetBIOSUDP": {
+      "Condition": "HasActiveDirectorySecurityGroup",
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "Description": "NetBIOS Name and Datagram Service",
+        "IpProtocol": "UDP",
+        "FromPort": "137",
+        "ToPort": "138",
+        "DestinationSecurityGroupId": {
+          "Ref": "ActiveDirectorySecurityGroup"
+        },
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "ADNetBIOSSession": {
+      "Condition": "HasActiveDirectorySecurityGroup",
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "Description": "NetBIOS Session Service",
+        "IpProtocol": "TCP",
+        "FromPort": "139",
+        "ToPort": "139",
+        "DestinationSecurityGroupId": {
+          "Ref": "ActiveDirectorySecurityGroup"
+        },
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "ADDS": {
+      "Condition": "HasActiveDirectorySecurityGroup",
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "Description": "Microsoft DS Service",
+        "IpProtocol": "TCP",
+        "FromPort": "445",
+        "ToPort": "445",
+        "DestinationSecurityGroupId": {
+          "Ref": "ActiveDirectorySecurityGroup"
+        },
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "ADDSUDP": {
+      "Condition": "HasActiveDirectorySecurityGroup",
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "Description": "Microsoft DS Service",
+        "IpProtocol": "UDP",
+        "FromPort": "445",
+        "ToPort": "445",
+        "DestinationSecurityGroupId": {
+          "Ref": "ActiveDirectorySecurityGroup"
+        },
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "ADLDAP": {
+      "Condition": "HasActiveDirectorySecurityGroup",
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "Description": "LDAP Service",
+        "IpProtocol": "TCP",
+        "FromPort": "389",
+        "ToPort": "389",
+        "DestinationSecurityGroupId": {
+          "Ref": "ActiveDirectorySecurityGroup"
+        },
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "ADLDAPUDP": {
+      "Condition": "HasActiveDirectorySecurityGroup",
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "Description": "LDAP Service",
+        "IpProtocol": "UDP",
+        "FromPort": "389",
+        "ToPort": "389",
+        "DestinationSecurityGroupId": {
+          "Ref": "ActiveDirectorySecurityGroup"
+        },
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "ADSSLLDAP": {
+      "Condition": "HasActiveDirectorySecurityGroup",
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "Description": "SSL LDAP Service",
+        "IpProtocol": "TCP",
+        "FromPort": "636",
+        "ToPort": "636",
+        "DestinationSecurityGroupId": {
+          "Ref": "ActiveDirectorySecurityGroup"
+        },
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "ADGlobalCatalog": {
+      "Condition": "HasActiveDirectorySecurityGroup",
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "Description": "Global Catalog LDAP and SSL LDAP Service",
+        "IpProtocol": "TCP",
+        "FromPort": "3268",
+        "ToPort": "3269",
+        "DestinationSecurityGroupId": {
+          "Ref": "ActiveDirectorySecurityGroup"
+        },
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "ADKerberos": {
+      "Condition": "HasActiveDirectorySecurityGroup",
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "Description": "Kerberos Service",
+        "IpProtocol": "TCP",
+        "FromPort": "88",
+        "ToPort": "88",
+        "DestinationSecurityGroupId": {
+          "Ref": "ActiveDirectorySecurityGroup"
+        },
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "ADKerberosUDP": {
+      "Condition": "HasActiveDirectorySecurityGroup",
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "Description": "Kerberos Service",
+        "IpProtocol": "UDP",
+        "FromPort": "88",
+        "ToPort": "88",
+        "DestinationSecurityGroupId": {
+          "Ref": "ActiveDirectorySecurityGroup"
+        },
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "ADDNS": {
+      "Condition": "HasActiveDirectorySecurityGroup",
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "Description": "DNS",
+        "IpProtocol": "TCP",
+        "FromPort": "53",
+        "ToPort": "53",
+        "DestinationSecurityGroupId": {
+          "Ref": "ActiveDirectorySecurityGroup"
+        },
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "ADDNSUDP": {
+      "Condition": "HasActiveDirectorySecurityGroup",
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "Description": "DNS",
+        "IpProtocol": "UDP",
+        "FromPort": "53",
+        "ToPort": "53",
+        "DestinationSecurityGroupId": {
+          "Ref": "ActiveDirectorySecurityGroup"
+        },
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "ADWINS": {
+      "Condition": "HasActiveDirectorySecurityGroup",
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "Description": "WINS Resolution Service",
+        "IpProtocol": "TCP",
+        "FromPort": "1512",
+        "ToPort": "1512",
+        "DestinationSecurityGroupId": {
+          "Ref": "ActiveDirectorySecurityGroup"
+        },
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "ADWINSUDP": {
+      "Condition": "HasActiveDirectorySecurityGroup",
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "Description": "WINS Resolution Service",
+        "IpProtocol": "UDP",
+        "FromPort": "1512",
+        "ToPort": "1512",
+        "DestinationSecurityGroupId": {
+          "Ref": "ActiveDirectorySecurityGroup"
+        },
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "ADWINSReplication": {
+      "Condition": "HasActiveDirectorySecurityGroup",
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "Description": "WINS Replication Service",
+        "IpProtocol": "TCP",
+        "FromPort": "42",
+        "ToPort": "42",
+        "DestinationSecurityGroupId": {
+          "Ref": "ActiveDirectorySecurityGroup"
+        },
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "ADWINSReplicationUDP": {
+      "Condition": "HasActiveDirectorySecurityGroup",
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "Description": "WINS Replication Service",
+        "IpProtocol": "UDP",
+        "FromPort": "42",
+        "ToPort": "42",
+        "DestinationSecurityGroupId": {
+          "Ref": "ActiveDirectorySecurityGroup"
+        },
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "ADDynamicPorts": {
+      "Condition": "HasActiveDirectorySecurityGroup",
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "Description": "Dynamic High Ports",
+        "IpProtocol": "TCP",
+        "FromPort": "49152",
+        "ToPort": "65535",
+        "DestinationSecurityGroupId": {
+          "Ref": "ActiveDirectorySecurityGroup"
+        },
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "ADDynamicPortsUDP": {
+      "Condition": "HasActiveDirectorySecurityGroup",
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "Description": "Dynamic High Ports",
+        "IpProtocol": "UDP",
+        "FromPort": "49152",
+        "ToPort": "65535",
+        "DestinationSecurityGroupId": {
+          "Ref": "ActiveDirectorySecurityGroup"
+        },
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "ADWinRM": {
+      "Condition": "HasActiveDirectorySecurityGroup",
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "Description": "WinRM",
+        "IpProtocol": "TCP",
+        "FromPort": "5985",
+        "ToPort": "5986",
+        "DestinationSecurityGroupId": {
+          "Ref": "ActiveDirectorySecurityGroup"
+        },
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    },
+    "ADDSWeb": {
+      "Condition": "HasActiveDirectorySecurityGroup",
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "Description": "AD DS Web Services",
+        "IpProtocol": "TCP",
+        "FromPort": "9389",
+        "ToPort": "9389",
+        "DestinationSecurityGroupId": {
+          "Ref": "ActiveDirectorySecurityGroup"
+        },
+        "GroupId": {
+          "Ref": "ManagementSecurityGroup"
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "ManagementSecurityGroup": {
+      "Description": "Management Security Group ID",
+      "Value": {
+        "Ref": "ManagementSecurityGroup"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "${Customer}ManagementSecurityGroup${VPCIdentifier}"
+        }
+      }
+    }
+  }
+}

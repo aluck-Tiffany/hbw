@@ -1,0 +1,114 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Account",
+    "Parameters": {
+        "Email": {
+            "Description": "Email address for new AWS account",
+            "Type": "String"
+        },
+        "Customer": {
+            "Description": "Customer name - MUST MATCH FOR ALL ACCOUNTS",
+            "Type": "String"
+        },
+        "Environment": {
+            "Description": "Environment name (e.g. Development, Production)",
+            "Type": "String"
+        },
+        "AccountType": {
+            "Description": "Account type",
+            "Type": "String",
+            "AllowedValues": [
+                "service",
+                "management",
+                "logging"
+            ]
+        },
+        "Controlled": {
+            "Description": "Controlled",
+            "Type": "String",
+            "AllowedValues": [
+                "true",
+                "false"
+            ]
+        },
+        "VpcCidrBlock": {
+            "Type": "String"
+        }
+    },
+    "Resources": {
+        "CreateAccount": {
+            "Type": "Custom::CreateAccount",
+            "Properties": {
+                "ServiceToken": {
+                    "Fn::ImportValue": "CreateAccountWrapper"
+                },
+                "accountName": {
+                    "Fn::Sub": "${Customer} ${Environment}"
+                },
+                "email": {
+                    "Ref": "Email"
+                },
+                "ResponseURL": {
+                    "Ref": "WaitConditionHandle"
+                }
+            }
+        },
+        "WaitConditionHandle": {
+            "Type": "AWS::CloudFormation::WaitConditionHandle",
+            "Properties": {}
+        },
+        "WaitCondition": {
+            "Type": "AWS::CloudFormation::WaitCondition",
+            "Properties": {
+                "Handle": {
+                    "Ref": "WaitConditionHandle"
+                },
+                "Timeout": "7200"
+            }
+        },
+        "Translate": {
+            "Type": "Custom::Translate",
+            "Properties": {
+                "ServiceToken": {
+                    "Fn::ImportValue": "Translate"
+                },
+                "data": {
+                    "Fn::GetAtt": [
+                        "WaitCondition",
+                        "Data"
+                    ]
+                }
+            }
+        },
+        "Pipeline": {
+            "Type": "Custom::Pipeline",
+            "Properties": {
+                "ServiceToken": "arn:aws:sns:ap-southeast-2:848194084705:pipeline",
+                "accountId": {
+                    "Fn::GetAtt": [
+                        "Translate",
+                        "AccountId"
+                    ]
+                },
+                "accountType": {
+                    "Ref": "AccountType"
+                },
+                "customer": {
+                    "Ref": "Customer"
+                },
+                "controlled": {
+                    "Ref": "Controlled"
+                },
+                "vpcCidrBlock": {
+                    "Ref": "VpcCidrBlock"
+                },
+                "environment": {
+                    "Ref": "Environment"
+                },
+                "billingAccountId": {
+                    "Ref": "AWS::AccountId"
+                }
+            }
+        }
+    }
+}

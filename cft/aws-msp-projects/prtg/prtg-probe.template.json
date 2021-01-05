@@ -1,0 +1,368 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "PRTG Probe",
+  "Parameters": {
+    "VPCIdentifier": {
+      "Type": "String",
+      "Description": "Specify the VPC Identifier - This is only to be used if more than one VPC is being deployed into the account"
+    },
+    "AMIID": {
+      "Description": "ID of the Amazon Machine Image (AMI)",
+      "Default": "",
+      "Type": "AWS::EC2::Image::Id"
+    },
+    "RootVolSize": {
+      "Type": "String",
+      "Description": "Leave Blank for Default AMI Size",
+      "Default": ""
+    },
+    "Key": {
+      "Type": "AWS::EC2::KeyPair::KeyName",
+      "Description": "Select an existing key pair to use for connecting to your Instances",
+      "MinLength": "1",
+      "MaxLength": "255"
+    },
+    "BootstrapURL": {
+      "Description": "Optional: Customer bootstrap url used for userdata",
+      "Type": "String",
+      "Default": "bootstrap.customer.hcs.datacom.com.au"
+    },
+    "PRTGMaster": {
+      "Description": "PRTG Master Server IP Range",
+      "Type": "String",
+      "Default": "203.89.224.115/32"
+    },
+    "CustomerCIDRRange": {
+      "Description": "Whole /16 CIDR Customer has reserved for AWS",
+      "Type": "String",
+      "Default": "10.0.0.0/16"
+    },
+    "InstanceType": {
+      "Description": "EC2 instance type",
+      "Type": "String",
+      "Default": "t2.small",
+      "AllowedValues": [
+        "m5.large",
+        "t1.micro",
+        "t2.nano",
+        "t2.micro",
+        "t2.small",
+        "t2.medium",
+        "t2.large",
+        "t2.xlarge",
+        "t2.2xlarge",
+        "m1.small",
+        "m1.medium",
+        "m1.large",
+        "m1.xlarge",
+        "m3.medium",
+        "m3.large",
+        "m3.xlarge",
+        "m3.2xlarge",
+        "m4.large",
+        "m4.xlarge",
+        "m4.2xlarge",
+        "m4.4xlarge",
+        "m4.10xlarge",
+        "m4.16xlarge",
+        "m2.xlarge",
+        "m2.2xlarge",
+        "m2.4xlarge",
+        "cr1.8xlarge",
+        "r3.large",
+        "r3.xlarge",
+        "r3.2xlarge",
+        "r3.4xlarge",
+        "r3.8xlarge",
+        "r4.large",
+        "r4.xlarge",
+        "r4.2xlarge",
+        "r4.4xlarge",
+        "r4.8xlarge",
+        "r4.16xlarge",
+        "x1.16xlarge",
+        "x1.32xlarge",
+        "i2.xlarge",
+        "i2.2xlarge",
+        "i2.4xlarge",
+        "i2.8xlarge",
+        "i3.large",
+        "i3.xlarge",
+        "i3.2xlarge",
+        "i3.4xlarge",
+        "i3.8xlarge",
+        "i3.16xlarge",
+        "hi1.4xlarge",
+        "hs1.8xlarge",
+        "c1.medium",
+        "c1.xlarge",
+        "c3.large",
+        "c3.xlarge",
+        "c3.2xlarge",
+        "c3.4xlarge",
+        "c3.8xlarge",
+        "c4.large",
+        "c4.xlarge",
+        "c4.2xlarge",
+        "c4.4xlarge",
+        "c4.8xlarge",
+        "cc1.4xlarge",
+        "cc2.8xlarge",
+        "g2.2xlarge",
+        "g2.8xlarge",
+        "cg1.4xlarge",
+        "p2.xlarge",
+        "p2.8xlarge",
+        "p2.16xlarge",
+        "d2.xlarge",
+        "d2.2xlarge",
+        "d2.4xlarge",
+        "d2.8xlarge",
+        "f1.2xlarge",
+        "f1.16xlarge"
+      ]
+    },
+    "CostCentreTag": {
+      "Type": "String"
+    },
+    "Customer": {
+      "Type": "String",
+      "Description": "Optional: Customer Name - This is only to be used if more than one customer AD is deployed into the account",
+      "Default": ""
+    },
+    "InboundRDPCIDRRange": {
+      "Description": "Optional: intranet CIDR has RDP access to PRTG Probe ",
+      "Type": "String",
+    }
+  },
+  "Conditions": {
+    "RootVolSizeCond": {
+      "Fn::Not": [{
+        "Fn::Equals": [{
+            "Ref": "RootVolSize"
+          },
+          ""
+        ]
+      }]
+    },
+    "HasBootstrapURL": {
+      "Fn::Not": [{
+        "Fn::Equals": [{
+            "Ref": "BootstrapURL"
+          },
+          ""
+        ]
+      }]
+    },
+    "HasInboundRDPCIDRRange": {
+      "Fn::Not": [{
+        "Fn::Equals": [{
+            "Ref": "InboundRDPCIDRRange"
+          },
+          ""
+        ]
+      }]
+    }
+  },
+  "Resources": {
+    "Instance": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "BlockDeviceMappings": [{
+          "DeviceName": "/dev/sda1",
+          "Ebs": {
+            "VolumeType": "gp2",
+            "DeleteOnTermination": "true",
+            "VolumeSize": {
+              "Fn::If": [
+                "RootVolSizeCond",
+                {
+                  "Ref": "RootVolSize"
+                },
+                {
+                  "Ref": "AWS::NoValue"
+                }
+              ]
+            }
+          }
+        }],
+        "ImageId": {
+          "Ref": "AMIID"
+        },
+        "NetworkInterfaces": [{
+          "NetworkInterfaceId": {
+            "Ref": "InstanceEth0"
+          },
+          "DeviceIndex": "0"
+        }],
+        "InstanceType": {
+          "Ref": "InstanceType"
+        },
+        "KeyName": {
+          "Ref": "Key"
+        },
+        "Tags": [{
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${Customer} PRTG Probe"
+            }
+          },
+          {
+            "Key": "CostCentre",
+            "Value": {
+              "Ref": "CostCentreTag"
+            }
+          }
+        ],
+        "UserData": {
+          "Fn::If": [
+            "HasBootstrapURL",
+            {
+              "Fn::Base64": {
+                "Fn::Join": [
+                  "\n",
+                  [
+                    "<powershell>",
+                    {
+                      "Fn::Sub": "Invoke-WebRequest \"https://${BootstrapURL}/latest/default?os=windows2016\" -OutFile $env:temp\\bootstrap.ps1; Invoke-Expression -Command \"$env:temp\\bootstrap.ps1\""
+                    },
+                    "</powershell>"
+                  ]
+                ]
+              }
+            },
+            {
+              "Ref": "AWS::NoValue"
+            }
+          ]
+        }
+      }
+    },
+    "PRTGSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "PRTG Security Group",
+        "VpcId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "VPC${VPCIdentifier}"
+          }
+        },
+        "SecurityGroupIngress": [{
+            "CidrIp": {
+              "Ref": "CustomerCIDRRange"
+            },
+            "IpProtocol": "UDP",
+            "FromPort": "162",
+            "ToPort": "162"
+          },
+          {
+            "CidrIp": "127.0.0.1/32",
+            "IpProtocol": "-1"
+          }
+        ],
+        "SecurityGroupEgress": [{
+            "CidrIp": {
+              "Ref": "PRTGMaster"
+            },
+            "IpProtocol": "TCP",
+            "FromPort": "23560",
+            "ToPort": "23560"
+          },
+          {
+            "CidrIp": {
+              "Ref": "CustomerCIDRRange"
+            },
+            "IpProtocol": "UDP",
+            "FromPort": "161",
+            "ToPort": "161"
+          },
+          {
+            "CidrIp": {
+              "Ref": "CustomerCIDRRange"
+            },
+            "IpProtocol": "TCP",
+            "FromPort": "1433",
+            "ToPort": "1433"
+          },
+          {
+            "CidrIp": {
+              "Ref": "CustomerCIDRRange"
+            },
+            "IpProtocol": "TCP",
+            "FromPort": "135",
+            "ToPort": "135"
+          },
+          {
+            "CidrIp": {
+              "Ref": "CustomerCIDRRange"
+            },
+            "IpProtocol": "TCP",
+            "FromPort": "445",
+            "ToPort": "445"
+          },
+          {
+            "CidrIp": {
+              "Ref": "CustomerCIDRRange"
+            },
+            "IpProtocol": "TCP",
+            "FromPort": "139",
+            "ToPort": "139"
+          },
+          {
+            "CidrIp": {
+              "Ref": "CustomerCIDRRange"
+            },
+            "IpProtocol": "TCP",
+            "FromPort": "22",
+            "ToPort": "22"
+          },
+          {
+            "CidrIp": {
+              "Ref": "CustomerCIDRRange"
+            },
+            "IpProtocol": "ICMP",
+            "FromPort": "-1",
+            "ToPort": "-1"
+          },
+          {
+            "CidrIp": "127.0.0.1/32",
+            "IpProtocol": "-1"
+          }
+        ]
+      }
+    },
+    "InboundRDP": {
+      "Condition": "HasInboundRDPCIDRRange",
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "Description": "Inbound RDP to PRTG Probe Box",
+        "CidrIp": {
+          "Ref": "InboundRDPCIDRRange"
+        },
+        "IpProtocol": "TCP",
+        "FromPort": "3389",
+        "ToPort": "3389",
+        "GroupId": {
+          "Ref": "PRTGSecurityGroup"
+        }
+      }
+    },
+    "InstanceEth0": {
+      "Type": "AWS::EC2::NetworkInterface",
+      "Properties": {
+        "GroupSet": [{
+            "Fn::ImportValue": {
+              "Fn::Sub": "${Customer}ManagementSecurityGroup${VPCIdentifier}"
+            }
+          },
+          {
+            "Ref": "PRTGSecurityGroup"
+          }
+        ],
+        "SubnetId": {
+          "Fn::ImportValue": "RestrictedASubnet"
+        }
+      }
+    }
+  }
+}

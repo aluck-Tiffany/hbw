@@ -1,0 +1,593 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "AWS Instances Risk Dashboard",
+    "Parameters": {
+        "TableName": {
+            "Type": "String",
+            "Default": "InstanceRiskDashboard"
+        },
+        "ReadThroughout": {
+            "Type": "String",
+            "Default": "5"
+        },
+        "WriteThroughout": {
+            "Type": "String",
+            "Default": "5"
+        },
+        "PuppetManifestBaseUri": {
+            "Type": "String",
+            "Default": "https://s3-ap-southeast-2.amazonaws.com/760584908251-public/puppet-modules-ssm/"
+        },
+        "WindowsPuppetManifestFilename": {
+            "Type": "String",
+            "Default": "puppet-modules-ssm-win.zip"
+        },
+        "sumologicEndPointUri": {
+            "Type": "String"
+        },
+        "ProxySet": {
+            "Type": "String",
+            "Default": ""
+        },
+        "roleName": {
+            "Type": "String",
+            "Default": "DatacomIntegration"
+        },
+        "externalId": {
+            "Type": "String",
+            "Default": "Datacom"
+        },
+        "serviceAccountIds": {
+            "Description": "AWS service account Ids seperated by comma",
+            "Type": "String",
+            "MinLength": 12
+        }
+    },
+    "Resources": {
+        "DDBTable": {
+            "Type": "AWS::DynamoDB::Table",
+            "Properties": {
+                "AttributeDefinitions": [{
+                    "AttributeName": "instanceId",
+                    "AttributeType": "S"
+                }],
+                "KeySchema": [{
+                    "AttributeName": "instanceId",
+                    "KeyType": "HASH"
+                }],
+                "ProvisionedThroughput": {
+                    "ReadCapacityUnits": 5,
+                    "WriteCapacityUnits": 5
+                },
+                "TableName": {
+                    "Ref": "TableName"
+                }
+            }
+        },
+        "LambdaFunctionRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [{
+                        "Effect": "Allow",
+                        "Principal": {
+                            "Service": "lambda.amazonaws.com"
+                        },
+                        "Action": "sts:AssumeRole"
+                    }]
+                },
+                "ManagedPolicyArns": ["arn:aws:iam::aws:policy/AdministratorAccess"],
+                "RoleName": "update-instanceTable"
+            }
+        },
+        "FunctionUpdateInstanceTable": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Code": {
+                    "ZipFile": "/* jshint esversion: 6 */\nconst AWS = require('aws-sdk'); // eslint-disable-line import/no-extraneous-dependencies\n\nconst docClient = new AWS.DynamoDB.DocumentClient();\nconst tableName = process.env.TableName;\n\nconst newInstance = (instanceId, accountId, createTime) => {\n  const params = {\n    TableName: tableName,\n    Item: {\n      instanceId,\n      accountId,\n      osVersion: 'unknown',\n      createTime,\n      instanceState: 'running',\n      stateChangeTime: createTime,\n      report: '{}',\n      antivirus: 'unknown',\n      patching: 'unknown',\n      cisCompliance: 'unknown',\n      enforcedRules: 0,\n      nonCheckedRules: 0,\n      nonComplianceRules: 0,\n    },\n  };\n\n  return docClient.put(params).promise();\n};\n\nconst updateInstanceState = params => docClient.update(params).promise();\n\nexports.handler = (event, context, callback) => {\n  console.log(JSON.stringify(event)); // eslint-disable-line no-console\n\n  const instanceStates = {\n    TerminateInstances: 'terminated',\n    StartInstances: 'running',\n    StopInstances: 'stopped',\n  };\n\n  const promises = [];\n\n  switch (event.detail.eventName) {\n    case 'RunInstances':\n      event.detail.responseElements.instancesSet.items.forEach((i) => {\n        promises.push(newInstance(i.instanceId, event.account, event.detail.eventTime));\n      });\n\n      Promise.all(promises).then(() => {\n        callback(null);\n      });\n\n      break;\n    case 'TerminateInstances':\n    case 'StartInstances':\n    case 'StopInstances':\n      event.detail.responseElements.instancesSet.items.forEach((i) => {\n        const params = {\n          TableName: tableName,\n          Key: {\n            instanceId: i.instanceId,\n          },\n          UpdateExpression: 'set stateChangeTime = :t, instanceState = :s',\n          ExpressionAttributeValues: {\n            ':s': instanceStates[event.detail.eventName],\n            ':t': event.detail.eventTime,\n          },\n          ReturnValues: 'UPDATED_NEW',\n        };\n        promises.push(updateInstanceState(params));\n      });\n      Promise.all(promises).then(() => {\n        callback(null);\n      });\n      break;\n    default:\n      callback('Unsupported CloudTrail Event');\n  }\n};\n"
+                },
+                "Description": "update-instanceTable",
+                "FunctionName": "update-instanceTable",
+                "Handler": "index.handler",
+                "MemorySize": "128",
+                "Timeout": "15",
+                "Runtime": "nodejs6.10",
+                "Role": {
+                    "Fn::GetAtt": ["LambdaFunctionRole", "Arn"]
+                },
+                "Environment": {
+                    "Variables": {
+                        "TableName": {
+                            "Ref": "TableName"
+                        }
+                    }
+                }
+            }
+        },
+        "UpdateInstanceTableLambdaPermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "FunctionUpdateInstanceTable"
+                },
+                "SourceArn": {
+                    "Fn::GetAtt": ["UpdateInstanceTableRule", "Arn"]
+                },
+                "Principal": "events.amazonaws.com"
+            }
+        },
+        "UpdateInstanceTableRule": {
+            "Type": "AWS::Events::Rule",
+            "Properties": {
+                "EventPattern": {
+                    "detail-type": ["AWS API Call via CloudTrail"],
+                    "detail": {
+                        "eventSource": ["ec2.amazonaws.com"],
+                        "eventName": ["RunInstances", "StartInstances", "StopInstances", "TerminateInstances"]
+                    }
+                },
+                "Name": "update-instanceTable",
+                "Targets": [{
+                    "Arn": {
+                        "Fn::GetAtt": ["FunctionUpdateInstanceTable", "Arn"]
+                    },
+                    "Id": "update-instanceTable"
+                }]
+            }
+        },
+        "FunctionDeregisterInstancesFromSSM": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Code": {
+                    "ZipFile": "/* jshint esversion: 6 */\nconst AWS = require('aws-sdk'); // eslint-disable-line import/no-extraneous-dependencies\n\nconst ssm = new AWS.SSM();\n\nconst ssmInfo = (datas, nextToken) => new Promise((resolve, reject) => {\n  const params = {\n    InstanceInformationFilterList: [{\n      key: 'ResourceType',\n      valueSet: [\n        'ManagedInstance',\n      ],\n    },\n    {\n      key: 'AssociationStatus',\n      valueSet: [\n        'Success',\n      ],\n    },\n    ],\n  };\n\n  if (nextToken) {\n    params.NextToken = nextToken;\n  }\n  ssm.describeInstanceInformation(params).promise()\n    .then((data) => {\n      if (data.NextToken) {\n        resolve(ssmInfo(datas.concat(data.InstanceInformationList), data.nextToken));\n      } else {\n        resolve(datas.concat(data.InstanceInformationList));\n      }\n    }).catch((e) => {\n      if (e === 'RateLimitExceeded') {\n        resolve(setTimeout(() => {\n          ssmInfo(datas, nextToken);\n        }, 1000));\n      } else {\n        reject(e);\n      }\n    });\n});\n\nexports.handler = (event, context, callback) => {\n  const promises = [];\n\n  if (event.detail.eventName === 'TerminateInstances') {\n    const instanceIds = [];\n    event.detail.responseElements.instancesSet.items.forEach((i) => {\n      instanceIds.push(i.instanceId);\n    });\n\n    ssmInfo([]).then((instances) => {\n      const filteredInstances = instances.filter((obj) => {\n        if (instanceIds.indexOf(obj.Name) === -1) {\n          return false;\n        }\n\n        return true;\n      });\n\n      filteredInstances.forEach((instance) => {\n        console.log(`Deregisger instance ${instance.Name} from SSM, SSM managedInstance ID ${instance.InstanceId}`);  // eslint-disable-line \n        promises.push(ssm.deregisterManagedInstance({\n          InstanceId: instance.InstanceId,\n        }).promise());\n      });\n    });\n\n    Promise.all(promises)\n      .then(() => {\n        callback(null);\n      })\n      .catch((err) => {\n        callback(err);\n      });\n  }\n};\n"
+                },
+                "Description": "Deregoster terminated insances from ssm",
+                "FunctionName": "deregister-instances-from-ssm",
+                "Handler": "index.handler",
+                "MemorySize": "128",
+                "Timeout": "15",
+                "Runtime": "nodejs6.10",
+                "Role": {
+                    "Fn::GetAtt": ["LambdaFunctionRole", "Arn"]
+                }
+            }
+        },
+        "DeregisterInstanceFromSSMLambdaPermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "FunctionDeregisterInstancesFromSSM"
+                },
+                "SourceArn": {
+                    "Fn::GetAtt": ["DeregisterInstanceFromSSMRule", "Arn"]
+                },
+                "Principal": "events.amazonaws.com"
+            }
+        },
+        "DeregisterInstanceFromSSMRule": {
+            "Type": "AWS::Events::Rule",
+            "Properties": {
+                "EventPattern": {
+                    "detail-type": ["AWS API Call via CloudTrail"],
+                    "detail": {
+                        "eventSource": ["ec2.amazonaws.com"],
+                        "eventName": ["TerminateInstances"]
+                    }
+                },
+                "Name": "deregister-instance-from-ssm",
+                "Targets": [{
+                    "Arn": {
+                        "Fn::GetAtt": ["FunctionDeregisterInstancesFromSSM", "Arn"]
+                    },
+                    "Id": "deregister-instance-from-ssm"
+                }]
+            }
+        },
+        "FunctionUpdatePuppetReport": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Code": {
+                    "ZipFile": "/* jshint esversion: 6 */\nconst AWS = require('aws-sdk'); // eslint-disable-line import/no-extraneous-dependencies\n\nconst docClient = new AWS.DynamoDB.DocumentClient();\nconst tableName = process.env.TableName;\n\nconst updateInstanceReport = (body) => {\n  const report = {\n    nonCompliant: '',\n    unEnforced: '',\n    enforced: '',\n  };\n\n  const params = {\n    TableName: tableName,\n    Key: {\n      instanceId: body.instanceId,\n    },\n    UpdateExpression: 'set osVersion = :os, antivirus = :av, patching = :p, cisCompliance = :c, nonCheckedRules = :nc, enforcedRules = :ec, nonCompliantRules = :fc, report = :r',\n    ExpressionAttributeValues: {\n      ':os': Object.prototype.hasOwnProperty.call(body, 'osVersion') ? body.osVersion : 'unknown',\n      ':av': Object.prototype.hasOwnProperty.call(body, 'antivirus') ? body.antivirus : 'unknown',\n      ':p': Object.prototype.hasOwnProperty.call(body, 'patching') ? body.patching : 'unknown',\n      ':c': Object.prototype.hasOwnProperty.call(body, 'cisCompliance') ? body.cisCompliance : 'unknwon',\n      ':nc': Object.prototype.hasOwnProperty.call(body, 'nonCheckedRules') ? body.nonCheckedRules : 0,\n      ':ec': Object.prototype.hasOwnProperty.call(body, 'enforcedRules') ? body.enforcedRules : 0,\n      ':fc': Object.prototype.hasOwnProperty.call(body, 'nonCompliantRules') ? body.nonCompliantRules : 0,\n      ':r': Object.prototype.hasOwnProperty.call(body, 'report') ? JSON.stringify(body.report) : JSON.stringify(report),\n    },\n    ReturnValues: 'UPDATED_NEW',\n  };\n\n  return docClient.update(params).promise();\n};\n\nexports.handler = (event, context, callback) => {\n  console.log(`request: ${JSON.stringify(event)}`); // eslint-disable-line no-console\n\n  updateInstanceReport(JSON.parse(event.body)).then((data) => {\n    const responseCode = 200;\n    const response = {\n      statusCode: responseCode,\n      headers: {\n        'x-custom-header': 'DynamoDB update response',\n      },\n      body: JSON.stringify(data, null, 2),\n    };\n    callback(null, response);\n  }).catch((err) => {\n    callback(err);\n  });\n};\n"
+                },
+                "Description": "Process Puppet report data from API Gateway and update DynamoDB Instance Entry",
+                "FunctionName": "update-puppet-report",
+                "Handler": "index.handler",
+                "MemorySize": "128",
+                "Timeout": "15",
+                "Runtime": "nodejs6.10",
+                "Role": {
+                    "Fn::GetAtt": ["LambdaFunctionRole", "Arn"]
+                },
+                "Environment": {
+                    "Variables": {
+                        "TableName": {
+                            "Ref": "TableName"
+                        }
+                    }
+                }
+            }
+        },
+        "UpdatePuppetReportPermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:invokeFunction",
+                "FunctionName": {
+                    "Fn::GetAtt": ["FunctionUpdatePuppetReport", "Arn"]
+                },
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Sub": "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:*"
+                }
+            }
+        },
+        "RestApi": {
+            "Type": "AWS::ApiGateway::RestApi",
+            "Properties": {
+                "Body": {
+                    "swagger": "2.0",
+                    "info": {
+                        "version": "2018-06-13T15:00:00AEST",
+                        "title": "report"
+                    },
+                    "basePath": "/latest",
+                    "schemes": ["https"],
+                    "paths": {
+                        "/report": {
+                            "post": {
+                                "produces": ["application/json"],
+                                "responses": {
+                                    "200": {
+                                        "description": "200 response",
+                                        "schema": {
+                                            "$ref": "#/definitions/Empty"
+                                        }
+                                    }
+                                },
+                                "x-amazon-apigateway-integration": {
+                                    "responses": {
+                                        "default": {
+                                            "statusCode": "200"
+                                        }
+                                    },
+                                    "uri": {
+                                        "Fn::Join": ["", ["arn:aws:apigateway:ap-southeast-2:lambda:path/2015-03-31/functions/", {
+                                            "Fn::GetAtt": ["FunctionUpdatePuppetReport", "Arn"]
+                                        }, "/invocations"]]
+                                    },
+                                    "passthroughBehavior": "when_no_match",
+                                    "httpMethod": "POST",
+                                    "contentHandling": "CONVERT_TO_TEXT",
+                                    "type": "aws_proxy"
+                                }
+                            }
+                        }
+                    },
+                    "definitions": {
+                        "Empty": {
+                            "type": "object",
+                            "title": "Empty Schema"
+                        }
+                    }
+                },
+                "Description": "API Gateway to update DynamoDB table for Instnace Risk dashbaord ",
+                "Name": "UpdatePuppetReportApiGateway"
+            }
+        },
+        "Deployment": {
+            "Type": "AWS::ApiGateway::Deployment",
+            "Properties": {
+                "Description": "API Gateway deployed from SWagger defination JSON File",
+                "RestApiId": {
+                    "Ref": "RestApi"
+                },
+                "StageName": "latest"
+            }
+        },
+        "Stage": {
+            "Type": "AWS::ApiGateway::Stage",
+            "Properties": {
+                "DeploymentId": {
+                    "Ref": "Deployment"
+                },
+                "RestApiId": {
+                    "Ref": "RestApi"
+                },
+                "StageName": "dev"
+            }
+        },
+        "FunctionPostToSumologic": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Code": {
+                    "ZipFile": "/* jshint esversion: 6 */\nconst AWS = require('aws-sdk'); // eslint-disable-line import/no-extraneous-dependencies\nconst url = require('url');\n\nconst dynamodb = new AWS.DynamoDB();\nconst tableName = process.env.TableName;\nconst endPoint = process.env.sumologicEndPointUri;\n\nconst https = require('https');\n\nconst sumo = url.parse(endPoint);\nconst options = {\n  method: 'POST',\n  hostname: sumo.hostname,\n  path: sumo.path,\n};\n\nconst params = {\n  TableName: tableName,\n  ScanFilter: {\n    instanceState: {\n      ComparisonOperator: 'NE',\n      AttributeValueList: [\n        { S: 'terminated' },\n      ],\n    },\n  },\n};\n\n// https://stackoverflow.com/questions/4505809/how-to-post-to-a-request-using-node-js/24143838\nconst post = logEvents => new Promise((resolve, reject) => {\n  const request = https.request(options, (response) => {\n    if (response.statusCode === 200) {\n      resolve();\n    } else {\n      reject(response.statusCode);\n    }\n  });\n  request.on('error', (error) => {\n    reject(error);\n  });\n\n  \n  logEvents.forEach((logEvent) => {\n    request.write(`${JSON.stringify(logEvent)}\\n`);\n  });\n\n  // request.write(`${JSON.stringify(logEvents)}\\n`);\n  request.end();\n\n  request.on('response', (response) => {\n    console.log(`STATUS: ${response.statusCode}`); // eslint-disable-line \n    console.log(`HEADERS: ${JSON.stringify(response.headers)}`); // eslint-disable-line \n    response.setEncoding('utf8');\n    response.on('data', (chunk) => {\n      console.log(`BODY: ${chunk}`); // eslint-disable-line\n    });\n  });\n  console.log(`Info: ${logEvents.length} records were posted to Sumologic!`); // eslint-disable-line \n});\n\nexports.handler = () => {\n  const date = new Date();\n  dynamodb.scan(params, (err, data) => {\n    if (err) console.log(err, err.stack); // eslint-disable-line \n    else {\n      const instanceReports = [];\n      data.Items.forEach((item) => {\n        const report = {\n          instanceId: item.instanceId.S,\n          accountId: Object.prototype.hasOwnProperty.call(item, 'accountId') ? item.accountId.S : 'unknown',\n          timestamp: date,\n          osVersion: Object.prototype.hasOwnProperty.call(item, 'osVersion') ? item.osVersion.S : 'unknown',\n          antivirus: Object.prototype.hasOwnProperty.call(item, 'antivirus') ? item.antivirus.S : 'unknown',\n          patching: Object.prototype.hasOwnProperty.call(item, 'patching') ? item.patching.S : 'unknown',\n          instanceState: Object.prototype.hasOwnProperty.call(item, 'instanceState') ? item.instanceState.S : 'unnkown',\n          cisCompliance: Object.prototype.hasOwnProperty.call(item, 'cisCompliance') ? item.cisCompliance.S : 'unknown',\n          enforcedRules: Object.prototype.hasOwnProperty.call(item, 'enforcedRules') ? item.enforcedRules.N : 0,\n          nonCompliantRules: Object.prototype.hasOwnProperty.call(item, 'nonCompliantRules') ? item.nonCompliantRules.N : 0,\n          nonCheckedRules: Object.prototype.hasOwnProperty.call(item, 'nonCheckedRules') ? item.nonCheckedRules.N : 0,\n          report: Object.prototype.hasOwnProperty.call(item, 'report') ? JSON.parse(item.report.S) : {\n            nonCompliant: '',\n            unEnforced: '',\n            enforced: '',\n          },\n        };\n        instanceReports.push(report);\n      });\n\n      post(instanceReports);\n    }\n  });\n};\n"
+                },
+                "Description": "Post puppet reports to Sumoligic",
+                "FunctionName": "post-puppet-report-to-sumologic",
+                "Handler": "index.handler",
+                "MemorySize": "256",
+                "Timeout": "15",
+                "Runtime": "nodejs6.10",
+                "Role": {
+                    "Fn::GetAtt": ["LambdaFunctionRole", "Arn"]
+                },
+                "Environment": {
+                    "Variables": {
+                        "TableName": {
+                            "Ref": "TableName"
+                        },
+                        "sumologicEndPointUri": {
+                            "Ref": "sumologicEndPointUri"
+                        }
+                    }
+                }
+            }
+        },
+        "ScheduledRule": {
+            "Type": "AWS::Events::Rule",
+            "Properties": {
+                "Description": "ScheduledRule",
+                "ScheduleExpression": "rate(30 minutes)",
+                "State": "ENABLED",
+                "Targets": [{
+                    "Arn": {
+                        "Fn::GetAtt": ["FunctionPostToSumologic", "Arn"]
+                    },
+                    "Id": "post-puppet-reports-to-sumo"
+                }]
+            }
+        },
+        "PermissionForEventsToInvokeLambda": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "FunctionName": {
+                    "Ref": "FunctionPostToSumologic"
+                },
+                "Action": "lambda:InvokeFunction",
+                "Principal": "events.amazonaws.com",
+                "SourceArn": {
+                    "Fn::GetAtt": ["ScheduledRule", "Arn"]
+                }
+            }
+        },
+        "WindowsSSMDocument": {
+            "Type": "AWS::SSM::Document",
+            "DependsOn": "RestApi",
+            "Properties": {
+                "Content": {
+                    "schemaVersion": "2.2",
+                    "description": "SSM Document to Run puppet client and run PowerShell Script to check OS compliance against CIS Benchmarks",
+                    "parameters": {
+                        "zipfileUri": {
+                            "type": "String",
+                            "description": "HTTPS URL to download Puppet Manifest",
+                            "allowedPattern": "https://s3-.*.zip",
+                            "default": {
+                                "Fn::Join": ["", [{
+                                    "Ref": "PuppetManifestBaseUri"
+                                }, {
+                                    "Ref": "WindowsPuppetManifestFilename"
+                                }]]
+                            }
+                        },
+                        "apiGatewayUri": {
+                            "type": "String",
+                            "description": "API Gateway URL to update DynamoDB",
+                            "default": {
+                                "Fn::Join": ["", ["https://", {
+                                    "Ref": "RestApi"
+                                }, ".execute-api.", {
+                                    "Ref": "AWS::Region"
+                                }, ".amazonaws.com/latest/report"]]
+                            }
+                        },
+                        "puppetNoopOption": {
+                            "type": "String",
+                            "description": "Run Puppet with --noop option",
+                            "default": "--noop"
+                        },
+                        "ProxySet": {
+                            "type": "String",
+                            "description": "HTTP Proxy URL",
+                            "default": ""
+                        }
+                    },
+                    "mainSteps": [{
+                        "action": "aws:runPowerShellScript",
+                        "name": "DownloadPuppetManifest",
+                        "inputs": {
+                            "timeoutSeconds": 300,
+                            "runCommand": ["$zipfileUri= '{{ zipfileUri }}'", "$ProxySet= '{{ ProxySet }}'", "#$zipfileUri = \"https://s3-ap-southeast-2.amazonaws.com/760584908251-public/puppet-modules-ssm/puppet-modules-ssm-win.zip\"\r", "$location  = \"C:\\ProgramData\\PuppetLabs\\puppet\\etc\\\"\r", "$localZipFile = 'C:\\temp\\puppet-modules-ssm-win.zip'\r", "\r", "function Expand-ZIPFile($file, $destination){\r", "    $shell = new-object -com shell.application\r", "    $zip = $shell.NameSpace($file)\r", "    foreach($item in $zip.items()){\r", "        $shell.Namespace($destination).copyhere($item)\r", "    }\r", "}\r", "\r", "Set-ExecutionPolicy Unrestricted -Force\r", "\r", "Remove-Item \"C:\\ProgramData\\PuppetLabs\\code\\environments\\production\\modules\\*\" -Recurse -Force -ErrorAction SilentlyContinue\r", "Remove-Item \"C:\\ProgramData\\PuppetLabs\\puppet\\var\\lib\\puppet\\reports\\*\"  -Recurse -Force -ErrorAction SilentlyContinue\r", "\r", "if ( test-path $localZipFile) {\r", "    $localMd5Sum  = (Get-FileHash $localZipFile -Algorithm MD5).Hash.Tolower()\r", "}\r", "else {\r", "    $localMd5Sum = ''\r", "}\r", "\r", "New-Item -Path C:\\temp -ItemType \"directory\" -ErrorAction SilentlyContinue\r", "New-Item -Path C:\\temp -Name \"puppet.conf\" -Force -Confirm:$false -ItemType File\r", "\r", "$sourceMd5Sum = (Invoke-WebRequest -UseBasicParsing -Method Head $zipfileUri).Headers[\"ETag\"].replace('\"','')\r", "\r", "if ($localMd5Sum -ne $sourceMd5Sum) {\r", "    $WebClient = New-Object System.Net.WebClient\r", "    if ($ProxySet) {\r", "        $WebClient.Proxy = New-Object System.Net.WebProxy(\"$ProxySet\", $true)\r", "    }\r", "    $WebClient.DownloadFile($zipfileUri, $localZipFile)\r", "}\r", "\r", "Expand-ZipFile $localZipFile -destination \"C:\\ProgramData\\PuppetLabs\\code\\environments\\production\\modules\"\r", "New-Item -Path $location -Name \"puppet.conf\" -Force -Confirm:$false -ItemType File\r", "\r", "$contents = @\"\r", "[main]\r", "logdir=\"C:\\ProgramData\\PuppetLabs\\puppet\\var\\log\\puppet\"\r", "vardir=\"C:\\ProgramData\\PuppetLabs\\puppet\\var\\lib\\puppet\"\r", "\"@\r", "Set-Content -Path \"$location\\puppet.conf\" -Value $contents\r", "# --EOF--\r", ""]
+                        }
+                    }, {
+                        "action": "aws:runPowerShellScript",
+                        "name": "RunPuppetClient",
+                        "inputs": {
+                            "timeoutSeconds": 300,
+                            "runCommand": ["$puppetNoopOption= '{{ puppetNoopOption }}'", "$Reportfiles = \"C:\\ProgramData\\PuppetLabs\\puppet\\var\\lib\\puppet\\reports\\${env:computername}*\\*.yaml\"\r", "\r", "remove-Item $Reportfiles -ErrorAction SilentlyContinue\r", "\r", "Set-ExecutionPolicy Unrestricted -Force\r", "\r", "try {\r", "    puppet\r", "}\r", "catch {\r", "    Write-Host \"Puppet Alias not found\"\r", "    $testpath = Test-Path \"C:\\Program Files\\Puppet Labs\\Puppet\\bin\\puppet.bat\"\r", "    if (!$testpath) {\r", "        Write-Host \"Puppet bat not found!\"\r", "        Exit\r", "    }\r", "\r", "    Set-Alias puppet \"C:\\Program Files\\Puppet Labs\\Puppet\\bin\\puppet.bat\"\r", "    try {\r", "        puppet\r", "    }\r", "    catch {\r", "        Write-Host \"Alias did not apply\"\r", "    }\r", "}\r", "\r", "puppet apply $puppetNoopOption  C:\\ProgramData\\PuppetLabs\\code\\environments\\production\\modules\\site_manifests\\windows_site.pp\r", ""]
+                        }
+                    }, {
+                        "action": "aws:runPowerShellScript",
+                        "name": "GetPendingUpdate",
+                        "inputs": {
+                            "timeoutSeconds": 600,
+                            "runCommand": ["$logfile = $env:temp + '\\get-pendingUpdate.log'", "", "Function Get-PendingUpdate { ", "    Process { ", "        $computer =  $env:COMPUTERNAME", "        Try { ", "            $updatesession =  [activator]::CreateInstance([type]::GetTypeFromProgID(\"Microsoft.Update.Session\",$computer)) ", "        } ", "        catch { ", "             Write-Warning \"$($Error[0])\" ", "        } ", "        $updatesearcher = $updatesession.CreateUpdateSearcher() ", "        try {", "            $searchresult = $updatesearcher.Search(\"IsInstalled=0\")     ", "        } ", "        catch {", "            Write-Warning \"$($Error[0])\" ", "            Set-Content $logfile \"unknown\"", "        }", "             ", "        If ($searchresult.Updates.Count -gt 0) { ", "            Write-Host \"Found $($searchresult.Updates.Count) update\\s!\" ", "            Set-Content $logfile \"False\"", "        } ", "        Else {  ", "            Write-Host \"No updates to install.\" ", "            Set-Content $logfile \"True\"", "        }  ", "    }  ", "}", "", "Function Get-ClientWSUSSetting {", "    Begin {", "        $EnvKeys = \"WUServer\",\"WUStatusServer\",\"ElevateNonAdmins\",\"TargetGroupEnabled\",\"TargetGroup\",\"DisableWindowsUpdateAccess\"", "        $ConfigKeys = \"AUOptions\",\"AutoInstallMinorUpdates\",\"DetectionFrequency\",\"DetectionFrequencyEnabled\",\"NoAutoRebootWithLoggedOnUsers\",", "        \"NoAutoUpdate\",\"RebootRelaunchTimeout\",\"RebootRelaunchTimeoutEnabled\",\"RebootWarningTimeout\",\"RebootWarningTimeoutEnabled\",\"RescheduleWaitTime\",\"RescheduleWaitTimeEnabled\",", "        \"ScheduleInstallDay\",\"ScheduleInstallTime\",\"UseWUServer\"", "    }", "    Process {", "        $Computer = $Env:Computername", "        $WSUSEnvhash = @{}", "        $WSUSConfigHash = @{}", "        $ServerReg = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey(\"LocalMachine\",$Computer)", "", "        $WSUSEnv = $ServerReg.OpenSubKey('Software\\Policies\\Microsoft\\Windows\\WindowsUpdate')", "        $subkeys = @($WSUSEnv.GetValueNames())", "", "        $NoData = @(Compare-Object -ReferenceObject $EnvKeys -DifferenceObject $subkeys | Select -ExpandProperty InputObject)", "        ForEach ($item in $NoData) {", "             $WSUSEnvhash[$item] = 'NA'", "        }", "        ", "        $Data = @(Compare-Object -ReferenceObject $EnvKeys -DifferenceObject $subkeys -IncludeEqual -ExcludeDifferent | Select -ExpandProperty InputObject)", "                ", "        ForEach ($key in $Data) {", "           if ($EnvKeys -contains $key) {", "               $WSUSEnvhash[$key] = $WSUSEnv.GetValue($key)", "           }    ", "        }", "", "        $WSUSConfig = $ServerReg.OpenSubKey('Software\\Policies\\Microsoft\\Windows\\WindowsUpdate\\AU')", "        $subkeys = @($WSUSConfig.GetValueNames())", "        $NoData = @(Compare-Object -ReferenceObject $ConfigKeys -DifferenceObject $subkeys | Select -ExpandProperty InputObject)", "        ForEach ($item in $NoData) {", "             $WSUSConfighash[$item] = 'NA'", "        }            ", "        $Data = @(Compare-Object -ReferenceObject $ConfigKeys -DifferenceObject $subkeys -IncludeEqual -ExcludeDifferent | Select -ExpandProperty InputObject)", "        ForEach ($key in $Data) {                 ", "            if ($ConfigKeys -contains $key) {", "                $WSUSConfighash[$key] = $WSUSConfig.GetValue($key)", "             }                                      ", "        }", "        $WSUSHash = ($WSUSEnvHash + $WSUSConfigHash)", "        $WSUSHash['Computername'] = $Computer", "        return (New-Object PSObject -Property $WSUSHash)", "    }", "}", "", "$CheckResult = Get-ClientWSUSSetting", "", "<#", "RescheduleWaitTime            : NA", "DetectionFrequencyEnabled     : NA", "AUOptions                     : 4", "NoAutoRebootWithLoggedOnUsers : NA", "RebootRelaunchTimeout         : NA", "Computername                  : EC2AMAZ-3S1NHAB", "WUServer                      : http://wsus.luv.hcs.datacom.com.au:8530", "RebootWarningTimeout          : NA", "WUStatusServer                : http://wsus.luv.hcs.datacom.com.au:8530", "TargetGroup                   : Development", "DisableWindowsUpdateAccess    : NA", "NoAutoUpdate                  : 0", "TargetGroupEnabled            : 1", "DetectionFrequency            : NA", "ScheduledInstallTime          : NA", "ScheduleInstallDay            : NA", "UseWUServer                   : 1", "AutoInstallMinorUpdates       : NA", "ScheduleInstallTime           : 35", "ScheduledInstallDay           : NA", "ElevateNonAdmins              : NA", "UpdateServiceUrlAlternate     : NA", "RebootWarningTimeoutEnabled   : NA", "RescheduleWaitTimeEnabled     : NA", "RebootRelaunchTimeoutEnabled  : NA", "#>", "", "", "write-host \"WSUS log file: ${logfile}\"", "if ( !($CheckResult.WUServer.StartsWith(\"http\") -and $CheckResult.WUStatusServer.StartsWith(\"http\")) -or [string]::IsNullOrEmpty($CheckResult.TargetGroup)) {", "    write-host \"WSUS client configuration fails, no further check for pending udpate\"", "    Set-Content $logfile \"False\"", "}", "else {", "    $pendingUpdateCheck = $True", "", "    write-host \"WSUS client configuration: OK, check pending update\" ", "", "    if ( test-path $logfile ) {", "        $lastModifiedDate = get-date (Get-Item $logfile).LastWriteTime", "        if ( $lastModifiedDate -gt (get-date).AddHours(-2)) {", "            write-host \"No pending update check - did in less then 2 hours before.\"", "            $pendingUpdateCheck = $False", "        } ", "        else { ", "            if ( $lastModifiedDate -gt (get-date).AddDays(-1)) {", "                write-host \"Checked in less then 24 hours before\"", "", "                if ((Get-Content $logfile) -ieq \"False\") {", "                    Write-host \"UpdateState is false, check pending update again\"", "                    $pendingUpdateCheck = $False", "                }", "            }", "        }", "    }    ", "    ", "    if ( $pendingUpdateCheck) {", "     Get-PendingUpdate", "    }", "}", "", "#  __END__", ""]
+                        }
+                    }, {
+                        "action": "aws:runPowerShellScript",
+                        "name": "PostToApiGateway",
+                        "inputs": {
+                            "timeoutSeconds": 300,
+                            "runCommand": ["$apiGatewayUri= '{{ apiGatewayUri }}'", "$puppetNoopOption= '{{ puppetNoopOption }}'", "$wsusChecklogfile = $env:temp + '\\get-pendingUpdate.log'\r", "$cisExecEnforcement = [regex]'(?<cisRuleIndex>\\d+\\.\\d+\\.\\d+\\.*\\d*) (?<description>.*)]'\r", "\r", "function get-indent($s) {\r", "    for ($i = 0; ($i -lt $s.Length) -and ($s[$i] -eq ' '); $i++) {};\r", "    return $i\r", "}\r", "\r", "function get-osVersion {\r", "\r", "    $Caption = (Get-WmiObject -class Win32_OperatingSystem).Caption\r", "    \r", "    if ($Caption.Contains('2016')) {\r", "        return 'windows2016'\r", "    }\r", "    elseif ($Caption.Contains('2012 R2')) {\r", "        return 'windows2012r2'\r", "    }\r", "    elseif ($Caption.Contains('2008 R2')) {\r", "        return 'windows2008r2'\r", "    }\r", "\r", "    return 'unknown'\r", "}\r", "\r", "function get-trendMicroStatus() {\r", "    $dsa_query = 'C:\\Program Files\\Trend Micro\\Deep Security Agent\\dsa_query.cmd'\r", "    $agentState = 'red'\r", "    $dsmUrl = ''\r", "    $currentTime = 9999999999\r", "    $lastManagerToAgentSession = 0\r", "    $pattern = [regex]'AgentStatus\\.(?<Key>.*): (?<Value>.*)' \r", "\r", "    # Is Trend Agent running?\r", "    $service = get-service | ? { $_.Name -eq 'ds_agent'}\r", "\r", "    if (($service -eq $null) -or ($service.Status -ne 'Running')) {\r", "        return \"False\"\r", "    }\r", "\r", "    $agentStatus = & $dsa_query -c GetAgentStatus 2>&1\r", "\r", "    foreach ($line in $agentStatus) {\r", "        $match = $pattern.Match($line)\r", "\r", "        if ($match.Success) {\r", "            switch ( $match.Groups['Key'].Value) {\r", "                \"currentTime\" { $currentTime = [int]$match.Groups['Value'].Value; break }\r", "                \"lastManagerToAgentSession\" { $lastManagerToAgentSession = [int]$match.Groups['Value'].Value; break }\r", "                \"agentState\" { $agentState = $match.Groups['Value'].Value; break }\r", "                \"dsmUrl\" { $dsmUrl = $match.Groups['Value'].Value ; break}\r", "                default { break }\r", "            }\r", "        \r", "        }\r", "    }\r", "\r", "    if ( ($agentState -ne 'green') -or ! $dsmUrl.StartsWith('https') -or ( ($currentTime - $lastManagerToAgentSession) -gt 3600)) {\r", "        return \"False\"\r", "    }\r", "    else {\r", "        return \"True\"\r", "    }\r", "}\r", "\r", "$logdir = (Get-ChildItem -Path \"C:\\ProgramData\\PuppetLabs\\puppet\\var\\lib\\puppet\\reports\\\" -Recurse | ? { $_.PSIsContainer }).FullName\r", "$reportFile = \"$logdir\\\" + (Get-ChildItem -Path $logdir | sort LastWriteTime | select -last 1)\r", "\r", "try {\r", "    $lines = Get-Content $reportFile -ErrorAction Stop\r", "}\r", "catch {\r", "    $ErrorMessage = $_.Exception.Message\r", "    throw $ErrorMessage\r", "}\r", "\r", "$ClientReport = @{}\r", "$ClientReport.Add(\"instanceId\",$(Invoke-RestMethod -Method GET -Uri http://169.254.169.254/latest/meta-data/instance-id))\r", "$ClientReport.add(\"report\",@{})\r", "\r", "$ClientReport.Add(\"osVersion\",(get-osVersion))\r", "$ClientReport.Add(\"antivirus\",(get-trendMicroStatus))\r", "$ClientReport.Add(\"patching\",(Get-Content $wsusChecklogfile))\r", "\r", "$unEnforcedCisRules = @()\r", "$enforcedCisRules = @()\r", "$nonCompliantCisRules = @()\r", "\r", "for ($i = 0; $i -le ($lines.Length - 2); $i++) {\r", "    $m = get-indent $lines[$i]\r", "    $n = get-indent $lines[$i + 1]\r", "\r", "    if (( $m -lt $n) -and $lines[$i].TrimStart().StartsWith('source:')) {\r", "        $lines[$i + 1] = $lines[$i] + \" \" + $lines[$i + 1].TrimStart()\r", "        $lines[$i] = ''\r", "    }\r", "}\r", "\r", "foreach ($line in $lines) {\r", "    if ($line.TrimStart().StartsWith('source: \"/Stage[main]/Win_cis::Rules::Section')) {\r", "\r", "        $match = $cisExecEnforcement.Match($line)\r", "\r", "        if ($match.Success) {\r", "\r", "            if ($match.Groups['description'].Value.EndsWith('- Exception Not Enforced!')) {\r", "                $unEnforcedCisRules += $match.Groups['cisRuleIndex'].Value\r", "            }\r", "            else {\r", "                if ( $puppetNoopOption -eq '--noop') {\r", "                    $nonCompliantCisRules += $match.Groups['cisRuleIndex'].Value\r", "                }\r", "                else {\r", "                    $enforcedCisRules += $match.Groups['cisRuleIndex'].Value\r", "                }\r", "            }\r", "        }\r", "    }\r", "}\r", "\r", "$ClientReport['report'].Add('nonCheckedCisRules',$unEnforcedCisRules)\r", "$ClientReport['report'].Add('enforcedCisRules',$enforcedCisRules)\r", "$ClientReport['report'].Add('nonCompliantCisRules',$nonCompliantCisRules)\r", "$ClientReport['report'].Add('reportTime',(get-date -Format 'dd/MM/yyyy HH:mm:ss') + ' ' + ([System.TimeZoneInfo]::Local | select-object -expandproperty Id))\r", "$clientReport.Add('nonCompliantRules',$nonCompliantCisRules.Length)\r", "$clientReport.Add('enforcedRules',$enforcedCisRules.Length)\r", "$clientReport.Add('nonCheckedRules',$unEnforcedCisRules.Length)\r", "\r", "if ($nonCompliantCisRules.Length -eq 0) {\r", "    $ClientReport.Add(\"cisCompliance\",\"True\")\r", "}\r", "else {\r", "    $ClientReport.Add(\"cisCompliance\",\"False\")\r", "}\r", "\r", "$response = Invoke-WebRequest -UseBasicParsing -Uri $apiGatewayUri -Method Post -Body (ConvertTo-Json $ClientReport) -ContentType \"application/json\"\r", "$result = $response.rawcontent\r", "write-host $response\r", "# __EOF__\r", ""]
+                        }
+                    }]
+                },
+                "DocumentType": "Command"
+            }
+        },
+        "LinuxSSMDocument": {
+            "Type": "AWS::SSM::Document",
+            "DependsOn": "RestApi",
+            "Properties": {
+                "Content": {
+                    "schemaVersion": "2.2",
+                    "description": "SSM Document to Run puppet client and run Shell Script to check OS compliance against CIS Benchmarks",
+                    "parameters": {
+                        "PuppetManifestBaseUri": {
+                            "type": "String",
+                            "description": "Puppet Manifest S3 bucket URL without filename",
+                            "allowedPattern": "https://s3-.*/",
+                            "default": {
+                                "Ref": "PuppetManifestBaseUri"
+                            }
+                        },
+                        "apiGatewayUri": {
+                            "type": "String",
+                            "description": "API Gateway URL to update DynamoDB",
+                            "default": {
+                                "Fn::Join": ["", ["https://", {
+                                    "Ref": "RestApi"
+                                }, ".execute-api.", {
+                                    "Ref": "AWS::Region"
+                                }, ".amazonaws.com/latest/report"]]
+                            }
+                        },
+                        "puppetNoopOption": {
+                            "type": "String",
+                            "description": "Run Puppet with --noop option",
+                            "default": "--noop"
+                        },
+                        "ProxySet": {
+                            "type": "String",
+                            "description": "HTTP Proxy URL",
+                            "default": ""
+                        }
+                    },
+                    "mainSteps": [{
+                        "action": "aws:runShellScript",
+                        "name": "DownloadPuppetManifest",
+                        "inputs": {
+                            "timeoutSeconds": 300,
+                            "runCommand": ["PuppetManifestBaseUri='{{ PuppetManifestBaseUri }}'", "#PuppetManifestBaseUri='https://s3-ap-southeast-2.amazonaws.com/760584908251-public/puppet-modules-ssm/'", "os=\"\"", "", "if !(type lsb_release &>/dev/null); then", "    distribution=$(cat /etc/*-release | grep '^NAME' );", "    release=$(cat /etc/*-release | grep '^VERSION_ID');", "else", "    distribution=$(lsb_release -i | grep 'ID');", "    release=$(lsb_release -r | grep 'Release');", "fi;", "", "if [ -z \"$distribution\" ]; then", "    distribution=$(cat /etc/*-release);", "    release=$(cat /etc/*-release);", "fi;", "releaseVersion=${release//[!0-9.]};", "", "case $distribution in", "    *\"Amazon\"*)", "        platform='amzn';", "        #if [[ $(uname -r) == *\"amzn2\"* ]]; then", "        #  os=\"amazon-linux2\"", "        #elif [[ $(uname -r) == *\"amzn1\"* ]]; then", "        if [[ $(uname -r) == *\"amzn1\"* ]]; then", "            os=\"amazon-linux1\"", "            puppetManifestUri=$PuppetManifestBaseUri'puppet-modules-amznlinux-ssm.tar.gz'", "            localZipfile=\"/tmp/puppet-modules-amznlinux-ssm.tar.gz\"", "        fi;", "        ;;", "", "     *\"RedHat\"* | *\"Red Hat\"*)", "        platform='RedHat_EL';", "        #if [[ $releaseVersion =~ ^6.* ]]; then", "\t#   puppetRepoPkg=\"https://yum.puppet.com/puppet5/puppet5-release-el-6.noarch.rpm\";", "        #elif [[ $releaseVersion =~ ^7.* ]]; then", "\tif [[ $releaseVersion =~ ^7.* ]]; then", "            os=\"rhel-7\"", "    \t    puppetManifestUri=$PuppetManifestBaseUri'puppet-modules-rhel7-ssm.tar.gz'", "    \t    localZipfile=\"/tmp/puppet-modules-rhel7-ssm.tar.gz\"", "        fi;", "        ;;", "esac", "", "if [[ -z \"${os}\" ]]; then", "    echo Unsupported Linux Distribution/Release is detected", "    logger -t Unsupported Linux Distribution/Release is detected", "    false", "    exit 1", "fi", "", "if [ -f $localZipfile ]; then", "    localMd5sum=$(md5sum $localZipfile | awk '{ print $1 }' )", "else", "    localMd5sum=\"NoLocaFile\"", "fi", "", "sourceMd5sum=$(curl -I $puppetManifestUri --silent | grep ETag | sed s/\\\"//g |awk '{ print $2 }')", "", "if [[ $sourceMd5sum == $localMd5sum ]]; then", "    echo \"Info: no download (Local file exists and no change in source file)\"", "else", "    echo \"Download file ...\"", "    curl $puppetManifestUri -o $localZipfile", "fi", "", "cat > /etc/puppetlabs/puppet/puppet.conf << EOF", "[main]", "logdir=/var/log/puppet", "vardir=/var/lib/puppet", "EOF", "", "rm -rf /etc/puppetlabs/code/environments/production/modules/*", "rm -rf /var/lib/puppet/reports/*", "", "cd /etc/puppetlabs/code/environments/production/modules/", "", "tar xzf $localZipfile", "chown -R root:root /etc/puppetlabs/code/environments/production/modules/", "# End", ""]
+                        }
+                    }, {
+                        "action": "aws:runShellScript",
+                        "name": "RunPuppetClient",
+                        "inputs": {
+                            "timeoutSeconds": 300,
+                            "runCommand": ["puppetNoopOption='{{ puppetNoopOption }}'", "/opt/puppetlabs/bin/puppet apply $puppetNoopOption /etc/puppetlabs/code/environments/production/modules/site_manifests/*_site.pp", ""]
+                        }
+                    }, {
+                        "action": "aws:runShellScript",
+                        "name": "PostToApiGateway",
+                        "inputs": {
+                            "timeoutSeconds": 300,
+                            "runCommand": ["apiGatewayUri='{{ apiGatewayUri }}'", "puppetNoopOption='{{ puppetNoopOption }}'", "reportFile=$(find /var/lib/puppet/reports/ -type f -printf \"%T@ %p\\n\" | sort -n | cut -d' ' -f 2- | tail -n 1)", "", "python << __END__", "import json", "import re", "import os", "import platform", "import requests", "", "reportMode = \"$puppetNoopOption\"", "url = \"$apiGatewayUri\"", "report_file = \"$reportFile\"", "", "leadinghash = re.compile(r'^\\s*-')", "cisExecEnforcement = re.compile(r'\\s*source: \\\"/Stage\\[main\\]/.*Section_\\d+_\\d+/.+\\[CIS (?P<cisRule>\\d+\\.\\d+\\.\\d+\\.*\\d*) (?P<description>.*)\\].*')", "", "client_report = {}", "enforcedCisBenchmarks = []", "unEnforcedCisBenchmarks = []", "", "def get_osversion():", "    if os.path.isfile('/etc/redhat-release'):", "        file = open('/etc/redhat-release')", "        osversion = file.read().rstrip(\"\\n\")", "        file.close()", "        ", "        return 'rhel-'+osversion.split(\" \")[6].split(\".\")[0]", "    else:", "        osversion = platform.platform()", "        if '.amzn1.' in osversion:", "            return 'amazon-linux1'", "        elif '.amzn2.' in osversion:", "            return 'amazon-linux2'", "        else:", "            return osversion", "", "", "def get_indent(astr):", "    try:", "        iter(astr)", "    except:", "        raise", "", "    idx = 0", "    while idx < len(astr) and astr[idx] == ' ':", "        idx += 1", "    if astr[0] <> ' ':", "        return False", "    return idx", "", "def check_update():", "  secPackages = -1", "  cmd = 'yum --security check-update'", "  yumPattern = re.compile(r'^\\w+\\s+package.*\\s+needed\\s+for\\s+security*')", "", "  raw = os.popen(cmd).read()", "", "  for line in raw.split('\\n'):", "    m = yumPattern.match(line)", "", "    if m:", "        secPackages = line.strip().split(' ')[0]", "", "  if secPackages == 'No':", "    return 'True'", "  elif int(secPackages) > 0:", "    print secPackages", "    return 'False'", "  else:", "    return 'unKnown'", "", "def check_antivirus():", "    trendAgent = '/opt/ds_agent/dsa_query'", "    cmd = trendAgent + ' -c GetAgentStatus'", "    agentState = 'red'", "    dsmUrl = ''", "    currentTime = 9999999999", "    lastManagerToAgentSession = 0", "", "    if not os.path.exists(trendAgent):", "        print 'TrendMicro Agent not installed'", "        return 'False'", "    else:", "\traw = os.popen('/etc/rc.d/init.d/ds_agent status').read()", "\tif raw.find('running') == -1:", "\t    print \"Trend Agent is not running\"", "            return \"False\"", "", "    print 'Check TrendAgent Status ...'", "    raw = os.popen(cmd).read()", "", "    for line in raw.split('\\n'):", "        if line.startswith('AgentStatus.agentState'):", "\t    agentState = line.split(' ')[-1]", "\telif line.startswith('AgentStatus.currentTime'):", "            currentTime = int(line.split(' ')[-1])", "        elif line.startswith('AgentStatus.dsmUrl'):", "            dsmUrl = line.split(' ')[-1]", "        elif line.startswith('AgentStatus.lastManagerToAgentSession'):", "            lastManagerToAgentSession = int(line.split(' ')[-1])", "", "    if (( agentState == 'green')  and ((currentTime - lastManagerToAgentSession) < 3600) and dsmUrl.startswith('https:')):", "        print 'antivirus status: ok'", "        return 'True'", "", "    print 'antivirus status: no'", "    return 'False'", "", "def main():", "    instanceId = requests.get('http://169.254.169.254/latest/meta-data/instance-id').text", "", "    client_report['instanceId'] = instanceId", "    client_report['report'] = {", "\t\t'nonCheckedCisRules': [],", "\t\t'enforcedCisRules': [],", "\t\t'nonCompliantCisRules': [],", "\t\t'reportTime': ''", "\t}", "    client_report['osVersion'] = get_osversion()", "    client_report['patching'] = check_update()", "    client_report['antivirus'] = check_antivirus()", "    client_report['cisCompliance'] = \"unknown\"", "    client_report['nonCompliantRules'] = 0", "    client_report['enforcedRules'] = 0", "    client_report['nonCheckedRules'] = 0", "    report = client_report['report']", "", "    f = open(report_file,'rt')", "    lines =  [x.strip(\"\\n\") for x in f.readlines()]", "", "    f.close()", "", "", "    for i in range(0,len(lines)-2):", "        m = get_indent(lines[i])", "        n = get_indent(lines[i+1])", "        if ((m < n) and not leadinghash.match(lines[i]) and (lines[i][-1] != ':')):", "                lines[i+1] = lines[i] + ' ' + lines[i+1].lstrip()", "                lines[i] = ''", "", "    for i in range(0,len(lines)-1):", "        m = cisExecEnforcement.match(lines[i])", "", "        if m:", "            cisRuleIndex  = m.group('cisRule') ", "            if ( m.group('description').endswith('Exception Not Enforced!')):", "                if cisRuleIndex not in unEnforcedCisBenchmarks:", "                    unEnforcedCisBenchmarks.append(cisRuleIndex)", "            elif cisRuleIndex not in enforcedCisBenchmarks:", "                 enforcedCisBenchmarks.append(cisRuleIndex)", "", "    if ( reportMode == '--noop'):", "    \treport['nonCompliantCisRules'] = enforcedCisBenchmarks", "    \tclient_report['nonCompliantRules'] = len(enforcedCisBenchmarks) ", "\tif len(enforcedCisBenchmarks) > 0:", "    \t   client_report['cisCompliance'] = \"False\"", "    else:", "    \treport['enforcedCisRules'] = unEnforcedCisBenchmarks", "    \tclient_report['cisCompliance'] = \"True\"", "    \tclient_report['enforcedRules'] = len(enforcedCisBenchmarks) ", "", "    report['nonCheckedCisRules'] = unEnforcedCisBenchmarks", "    report['reportTime'] = \"$(date)\"", "", "    client_report['nonCheckedRules'] =  len(unEnforcedCisBenchmarks)", "", "    print json.dumps(client_report,indent=2)", "", "    headers = {'Content-type': 'application/json', 'Accept': 'text/plain'}", "    r = requests.post(url, data=json.dumps(client_report), headers=headers)", "", "    return r.status_code == 200", "", "if  __name__ =='__main__':main()", "__END__", "", ""]
+                        }
+                    }]
+                },
+                "DocumentType": "Command"
+            }
+        },
+        "WindowsAssociationNoop": {
+            "Type": "AWS::SSM::Association",
+            "Properties": {
+                "AssociationName": "WindowsAssociationNoop",
+                "Name": {
+                    "Ref": "WindowsSSMDocument"
+                },
+                "ScheduleExpression": "cron(0/30 * * * ? *)",
+                "Targets": [{
+                    "Key": "tag:ssm",
+                    "Values": ["windows2012r2", "windows2016", "windows2008r2", "windows"]
+                }]
+            }
+        },
+        "WindowsAssociationEnforce": {
+            "Type": "AWS::SSM::Association",
+            "Properties": {
+                "AssociationName": "WindowsAssociationEnforce",
+                "Name": {
+                    "Ref": "WindowsSSMDocument"
+                },
+                "Parameters": {
+                    "puppetNoopOption": [""]
+                },
+                "ScheduleExpression": "cron(0/30 * * * ? *)",
+                "Targets": [{
+                    "Key": "tag:ssm",
+                    "Values": ["windows2012r2-enforce", "windows2016-enforce", "windows2008r2-enforce", "windows-enforce"]
+                }]
+            }
+        },
+        "LinuxAssociationNoop": {
+            "Type": "AWS::SSM::Association",
+            "Properties": {
+                "AssociationName": "LinuxAssociationNoop",
+                "Name": {
+                    "Ref": "LinuxSSMDocument"
+                },
+                "ScheduleExpression": "cron(0/30 * * * ? *)",
+                "Targets": [{
+                    "Key": "tag:ssm",
+                    "Values": ["rhel-7", "amazon-linux1", "amazon-linux2"]
+                }]
+            }
+        },
+        "LinuxAssociationEnforce": {
+            "Type": "AWS::SSM::Association",
+            "Properties": {
+                "AssociationName": "LinuxAssociationEnforce",
+                "Name": {
+                    "Ref": "LinuxSSMDocument"
+                },
+                "Parameters": {
+                    "puppetNoopOption": [""]
+                },
+                "ScheduleExpression": "cron(0/30 * * * ? *)",
+                "Targets": [{
+                    "Key": "tag:ssm",
+                    "Values": ["rhel-7-enforce", "amazon-linux1-enforce", "amazon-linux2-enforce"]
+                }]
+            }
+        },
+        "FunctionInitializeExistingInstances": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Code": {
+                    "ZipFile": "/* jshint esversion: 6 */\nconst AWS = require('aws-sdk'); // eslint-disable-line import/no-extraneous-dependencies\n\nconst rName = process.env.roleName;\nconst exId = process.env.externalId;\nconst sIds = process.env.serviceAccountIds;\nconst tableName = process.env.TableName;\n\nconst sts = new AWS.STS();\nconst dynamodb = new AWS.DynamoDB();\n\nconst updateDBEntry = function (ec2, aId, reps) { // eslint-disable-line func-names\n  ec2.describeInstances({}).promise()\n    .then((data) => {\n      data.Reservations.forEach((res) => {\n        res.Instances.forEach((i) => {\n          if (i.State.Name === 'terminated') {\n            console.log(`Ingore terminated instance ${i.InstanceId}`); // eslint-disable-line no-console\n          } else {\n            let os = i.Platform ? i.Platform : 'unknown';\n            for (const r of reps) { // eslint-disable-line \n              if (r.instanceId === i.InstanceId) {\n                if ((r.osVersion !== 'unknown') && (r.osVersion !== '')) {\n                  os = r.osVersion;\n                }\n                break;\n              }\n            }\n            const params = {\n              ExpressionAttributeValues: {\n                ':id': {\n                  S: aId,\n                },\n                ':os': {\n                  S: os,\n                },\n                ':s': {\n                  S: i.State.Name,\n                },\n              },\n              Key: {\n                instanceId: {\n                  S: i.InstanceId,\n                },\n              },\n              ReturnValues: 'ALL_NEW',\n              TableName: tableName,\n              UpdateExpression: 'SET accountId = :id, osVersion = :os, instanceState = :s',\n            };\n\n            dynamodb.updateItem(params, (e, d) => {\n              if (e) console.log(e, e.stack); // eslint-disable-line no-console\n              else console.log(d); // eslint-disable-line no-console\n            });\n          }\n        });\n      })\n        .catch((e) => {\n          console.log(e); // eslint-disable-line no-console\n        });\n    });\n};\n\nconst updateAccounts = (aId, reps) => new Promise((resolve, reject) => {\n  sts.getCallerIdentity({}, (e, d) => {\n    if (e) reject(e);\n    else if (aId === d.Account) {\n      const ec2 = new AWS.EC2();\n      updateDBEntry(ec2, aId, reps);\n    } else {\n      sts.assumeRole({\n        DurationSeconds: 3600,\n        ExternalId: exId,\n        RoleArn: `arn:aws:iam::${aId}:role/${rName}`,\n        RoleSessionName: `${aId}-dashboard`,\n      }, (err, data) => {\n        if (err) {\n          reject(err);\n        } else {\n          const ec2 = new AWS.EC2({\n            accessKeyId: data.Credentials.AccessKeyId,\n            secretAccessKey: data.Credentials.SecretAccessKey,\n            sessionToken: data.Credentials.SessionToken,\n          });\n          updateDBEntry(ec2, aId, reps);\n        }\n      });\n    }\n  });\n});\n\nexports.handler = (event, context, callback) => {\n  const promises = [];\n\n  dynamodb.scan({\n    TableName: tableName,\n  }, (e, d) => {\n    if (e) callback(e);\n    else {\n      const reps = [];\n      d.Items.forEach((i) => {\n        const r = {\n          instanceId: i.instanceId.S,\n          osVersion: Object.prototype.hasOwnProperty.call(i, 'osVersion') ? i.osVersion.S : 'unknown',\n        };\n        reps.push(r);\n      });\n\n      sIds.replace(/\\s/g, '').split(',').forEach((aId) => {\n        console.log(`Checking AWS account ${aId} ...`); // eslint-disable-line no-console\n        promises.push(updateAccounts(aId, reps));\n      });\n\n      Promise.all(promises).then(() => {\n        callback();\n      }).catch((err) => {\n        callback(err);\n      });\n    }\n  });\n};\n"
+                },
+                "FunctionName": {
+                    "Fn::Join": ["-", [{
+                        "Ref": "AWS::StackName"
+                    }, "initialize-existing-instances"]]
+                },
+                "Handler": "index.handler",
+                "MemorySize": "128",
+                "Role": {
+                    "Fn::GetAtt": ["LambdaFunctionRole", "Arn"]
+                },
+                "Runtime": "nodejs6.10",
+                "Environment": {
+                    "Variables": {
+                        "serviceAccountIds": {
+                            "Ref": "serviceAccountIds"
+                        },
+                        "roleName": {
+                            "Ref": "roleName"
+                        },
+                        "externalId": {
+                            "Ref": "externalId"
+                        },
+                        "TableName": {
+                            "Ref": "TableName"
+                        }
+                    }
+                },
+                "Timeout": "300"
+            }
+        }
+    }
+}

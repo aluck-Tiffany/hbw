@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?TSGateway version="1.0"?>
+<TsgServer>
+   <ServerName>GATEWAY</ServerName>
+   <ServerSettings>
+      <MaxConnections>4294967295</MaxConnections>
+      <UnlimitedConnections>1</UnlimitedConnections>
+      <CentralCapEnabled>0</CentralCapEnabled>
+      <RequestSOH>0</RequestSOH>
+      <OnlyConsentCapableClients>0</OnlyConsentCapableClients>
+      <LogEvents>
+         <LogEvent>
+            <Name>LogChannelDisconnect</Name>
+            <Enabled>1</Enabled>
+         </LogEvent>
+         <LogEvent>
+            <Name>LogFailureChannelConnect</Name>
+            <Enabled>1</Enabled>
+         </LogEvent>
+         <LogEvent>
+            <Name>LogFailureConnectionAuthorizationCheck</Name>
+            <Enabled>1</Enabled>
+         </LogEvent>
+         <LogEvent>
+            <Name>LogFailureResourceAuthorizationCheck</Name>
+            <Enabled>1</Enabled>
+         </LogEvent>
+         <LogEvent>
+            <Name>LogSuccessfulChannelConnect</Name>
+            <Enabled>1</Enabled>
+         </LogEvent>
+         <LogEvent>
+            <Name>LogSuccessfulConnectionAuthorizationCheck</Name>
+            <Enabled>1</Enabled>
+         </LogEvent>
+         <LogEvent>
+            <Name>LogSuccessfulResourceAuthorizationCheck</Name>
+            <Enabled>1</Enabled>
+         </LogEvent>
+      </LogEvents>
+      <AuthenticationPlugin>native</AuthenticationPlugin>
+      <AuthorizationPlugin>native</AuthorizationPlugin>
+      <ConsentMessageText />
+      <AdminMessageText />
+      <AdminMsgStartDate />
+      <AdminMsgEndDate />
+      <SslBridging>0</SslBridging>
+      <HttpIPAddress>*</HttpIPAddress>
+      <UdpIPAddress>*</UdpIPAddress>
+      <HttpPort>443</HttpPort>
+      <UdpPort>3391</UdpPort>
+      <IsUdpEnabled>1</IsUdpEnabled>
+      <EnforceChannelBinding>1</EnforceChannelBinding>
+   </ServerSettings>
+   <Caps>
+      <Cap>
+         <Name>ALL</Name>
+         <SmartcardAllowed>0</SmartcardAllowed>
+         <PasswordAllowed>1</PasswordAllowed>
+         <SecureIdAllowed>0</SecureIdAllowed>
+         <CookieAuthenticationAllowed>1</CookieAuthenticationAllowed>
+         <Enabled>1</Enabled>
+         <DiskDrivesDisabled>0</DiskDrivesDisabled>
+         <PrintersDisabled>0</PrintersDisabled>
+         <SerialPortsDisabled>0</SerialPortsDisabled>
+         <ClipboardDisabled>0</ClipboardDisabled>
+         <PlugAndPlayDevicesDisabled>0</PlugAndPlayDevicesDisabled>
+         <EnableAll>1</EnableAll>
+         <DisableAll>0</DisableAll>
+         <AllowOnlySDRServers>0</AllowOnlySDRServers>
+         <UserGroupNames>
+            <UserGroup>__DomainNetBIOSName__\Domain Users</UserGroup>
+         </UserGroupNames>
+         <ComputerGroupNames />
+         <IdleTimeout>0</IdleTimeout>
+         <SessionTimeout>0</SessionTimeout>
+         <SessionTimeoutAction>0</SessionTimeoutAction>
+         <HealthPolicy />
+         <NapCapable>0</NapCapable>
+      </Cap>
+      <Cap>
+         <Name>RDG_CAP_AllUsers</Name>
+         <SmartcardAllowed>0</SmartcardAllowed>
+         <PasswordAllowed>1</PasswordAllowed>
+         <SecureIdAllowed>0</SecureIdAllowed>
+         <CookieAuthenticationAllowed>0</CookieAuthenticationAllowed>
+         <Enabled>1</Enabled>
+         <DiskDrivesDisabled>0</DiskDrivesDisabled>
+         <PrintersDisabled>0</PrintersDisabled>
+         <SerialPortsDisabled>0</SerialPortsDisabled>
+         <ClipboardDisabled>0</ClipboardDisabled>
+         <PlugAndPlayDevicesDisabled>0</PlugAndPlayDevicesDisabled>
+         <EnableAll>1</EnableAll>
+         <DisableAll>0</DisableAll>
+         <AllowOnlySDRServers>0</AllowOnlySDRServers>
+         <UserGroupNames>
+            <UserGroup>__DomainNetBIOSName__\Domain Users</UserGroup>
+         </UserGroupNames>
+         <ComputerGroupNames />
+         <IdleTimeout>0</IdleTimeout>
+         <SessionTimeout>0</SessionTimeout>
+         <SessionTimeoutAction>0</SessionTimeoutAction>
+         <HealthPolicy />
+         <NapCapable>0</NapCapable>
+      </Cap>
+   </Caps>
+   <Raps>
+      <Rap>
+         <Name>RDG_AllDomainComputers</Name>
+         <Description>All domain computers</Description>
+         <Enabled>0</Enabled>
+         <ResourceGroupType>CG</ResourceGroupType>
+         <ResourceGroupNames>
+            <ResourceGroup>__DomainNetBIOSName__\Domain Computers</ResourceGroup>
+         </ResourceGroupNames>
+         <UserGroupNames>
+            <UserGroup>__DomainNetBIOSName__\Domain Users</UserGroup>
+         </UserGroupNames>
+         <ProtocolNames>
+            <Protocol>RDP</Protocol>
+         </ProtocolNames>
+         <PortNumbers>3389</PortNumbers>
+      </Rap>
+      <Rap>
+         <Name>RDG_RDConnectionBrokers</Name>
+         <Description>RD Connection Broker Computers</Description>
+         <Enabled>0</Enabled>
+         <ResourceGroupType>RG</ResourceGroupType>
+         <ResourceGroupNames>
+            <ResourceGroup>RDG_RDCBComputers</ResourceGroup>
+         </ResourceGroupNames>
+         <UserGroupNames>
+            <UserGroup>__DomainNetBIOSName__\Domain Users</UserGroup>
+         </UserGroupNames>
+         <ProtocolNames>
+            <Protocol>RDP</Protocol>
+         </ProtocolNames>
+         <PortNumbers>3389</PortNumbers>
+      </Rap>
+      <Rap>
+         <Name>Datacom-Policy-AllowAll</Name>
+         <Description />
+         <Enabled>1</Enabled>
+         <ResourceGroupType>ALL</ResourceGroupType>
+         <ResourceGroupNames />
+         <UserGroupNames>
+            <UserGroup>__DomainNetBIOSName__\Domain Users</UserGroup>
+         </UserGroupNames>
+         <ProtocolNames>
+            <Protocol>RDP</Protocol>
+         </ProtocolNames>
+         <PortNumbers>3389</PortNumbers>
+      </Rap>
+   </Raps>
+   <ResourceGroups>
+      <ResourceGroup>
+         <Name>RDG_RDCBComputers</Name>
+         <Description>All RDCB Computers in the deployment</Description>
+         <Resources>
+            <Resource>__ComputerFQDNName__</Resource>
+         </Resources>
+      </ResourceGroup>
+   </ResourceGroups>
+   <RadiusServers />
+   <LoadBalancingServers />
+   <HealthPolicies />
+</TsgServer>

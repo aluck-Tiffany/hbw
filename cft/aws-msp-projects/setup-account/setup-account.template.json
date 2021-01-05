@@ -1,0 +1,240 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Setup Account",
+    "Parameters": {
+        "CICDBucket": {
+            "Description": "CI/CD Functions Bucket",
+            "Type": "String"
+        },
+        "CloudCheckrEditCredentialsVersion": {
+            "Type": "String",
+            "Default": "latest"
+        },
+        "CloudCheckrAddAccountVersion": {
+            "Type": "String",
+            "Default": "latest"
+        }
+    },
+    "Resources": {
+        "FunctionRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": "lambda.amazonaws.com"
+                            },
+                            "Action": "sts:AssumeRole"
+                        }
+                    ]
+                },
+                "ManagedPolicyArns": [
+                    "arn:aws:iam::aws:policy/AdministratorAccess"
+                ],
+                "Policies": [
+                    {
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": {
+                                "Effect": "Allow",
+                                "Action": "sts:AssumeRole",
+                                "Resource": "*"
+                            }
+                        },
+                        "PolicyName": "AssumeRole"
+                    }
+                ]
+            }
+        },
+        "UpdatePolicy": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Code": {
+                    "ZipFile": {
+                        "Fn::Join": [
+                            "\n",
+                            [
+                                "const AWS = require('aws-sdk'); // eslint-disable-line import/no-extraneous-dependencies",
+                                "const s3 = new AWS.S3();",
+                                "const {",
+                                "    bucket,",
+                                "} = process.env;",
+                                "exports.handler = (event, context, callback) => {",
+                                "    console.log(JSON.stringify(event));",
+                                "    Promise.resolve()",
+                                "        .then(() => {",
+                                "            return s3.getBucketPolicy({",
+                                "                Bucket: bucket",
+                                "            }).promise()",
+                                "        })",
+                                "        .then((data) => {",
+                                "            const policy = JSON.parse(data.Policy)",
+                                "            console.log(policy)",
+                                "            const arns = policy.Statement[0].Principal.AWS;",
+                                "            if (!arns.map((arn) => {",
+                                "                return arn.replace(/\\D/g, '')",
+                                "            }).includes(event.accountId)) policy.Statement[0].Principal.AWS.push(`arn:aws:iam::${event.accountId}:root`)",
+                                "            console.log(policy)",
+                                "            return s3.putBucketPolicy({",
+                                "                Bucket: bucket,",
+                                "                Policy: JSON.stringify(policy)",
+                                "            }).promise()",
+                                "        })",
+                                "        .then(() => {",
+                                "            callback(null)",
+                                "        })",
+                                "        .catch((err) => {",
+                                "            callback(err)",
+                                "        });",
+                                "};"
+                            ]
+                        ]
+                    }
+                },
+                "Handler": "index.handler",
+                "MemorySize": 128,
+                "Role": {
+                    "Fn::GetAtt": [
+                        "FunctionRole",
+                        "Arn"
+                    ]
+                },
+                "Runtime": "nodejs6.10",
+                "Timeout": 30,
+                "Environment": {
+                    "Variables": {
+                        "bucket": {
+                            "Ref": "CICDBucket"
+                        }
+                    }
+                }
+            }
+        },
+        "CloudCheckrAddAccount": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Code": {
+                    "S3Bucket": {
+                        "Ref": "CICDBucket"
+                    },
+                    "S3Key": {
+                        "Fn::Sub": "aws-msp-projects/setup-account/cloudcheckr-add-account/${CloudCheckrAddAccountVersion}/function.zip"
+                    }
+                },
+                "Handler": "index.handler",
+                "MemorySize": 128,
+                "Role": {
+                    "Fn::GetAtt": [
+                        "FunctionRole",
+                        "Arn"
+                    ]
+                },
+                "Runtime": "nodejs6.10",
+                "Timeout": 30
+            }
+        },
+        "CloudCheckrEditCredentials": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Code": {
+                    "S3Bucket": {
+                        "Ref": "CICDBucket"
+                    },
+                    "S3Key": {
+                        "Fn::Sub": "aws-msp-projects/setup-account/cloudcheckr-edit-credentials/${CloudCheckrEditCredentialsVersion}/function.zip"
+                    }
+                },
+                "Handler": "index.handler",
+                "MemorySize": 128,
+                "Role": {
+                    "Fn::GetAtt": [
+                        "FunctionRole",
+                        "Arn"
+                    ]
+                },
+                "Runtime": "nodejs6.10",
+                "Timeout": 30
+            }
+        },
+        "StateMachineRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": {
+                                    "Fn::Sub": "states.${AWS::Region}.amazonaws.com"
+                                }
+                            },
+                            "Action": "sts:AssumeRole"
+                        }
+                    ]
+                },
+                "Policies": [
+                    {
+                        "PolicyName": {
+                            "Fn::Sub": "${AWS::StackName}"
+                        },
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "lambda:InvokeFunction"
+                                    ],
+                                    "Resource": "*"
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "StateMachine": {
+            "Type": "AWS::StepFunctions::StateMachine",
+            "Properties": {
+                "DefinitionString": {
+                    "Fn::Sub": [
+                        "{\n    \"Comment\": \"Setup Account Machine\",\n    \"StartAt\": \"AddCloudCheckrAccount\",\n    \"States\": {\n        \"AddCloudCheckrAccount\": {\n            \"Type\": \"Task\",\n            \"Resource\": \"${CloudCheckrAddAccount}\",\n            \"Next\": \"UpdatePolicy\",\n            \"Catch\": [\n                {\n                    \"ErrorEquals\": [\n                        \"States.ALL\"\n                    ],\n                    \"Next\": \"Fail\"\n                }\n            ],\n            \"ResultPath\": \"$.cloudcheckr\"\n        },\n        \"UpdatePolicy\": {\n            \"Type\": \"Task\",\n            \"Resource\": \"${UpdatePolicy}\",\n            \"Next\": \"cloudCheckrAccountId\",\n            \"Catch\": [\n                {\n                    \"ErrorEquals\": [\n                        \"States.ALL\"\n                    ],\n                    \"Next\": \"Fail\"\n                }\n            ]\n        },\n        \"cloudCheckrAccountId\": {\n            \"Type\": \"Pass\",\n            \"InputPath\": \"$.cloudcheckr.role_account_id\",\n            \"ResultPath\": \"$.cloudCheckrAccountId\",\n            \"Next\": \"cloudCheckrExternalId\"\n        },\n        \"cloudCheckrExternalId\": {\n            \"Type\": \"Pass\",\n            \"InputPath\": \"$.cloudcheckr.cc_external_id\",\n            \"ResultPath\": \"$.cloudCheckrExternalId\",\n            \"Next\": \"SetupAccount\"\n        },\n        \"SetupAccount\": {\n            \"Type\": \"Task\",\n            \"Resource\": \"${SetupAccount}\",\n            \"Next\": \"WaitForAccountBuild\",\n            \"Catch\": [\n                {\n                    \"ErrorEquals\": [\n                        \"States.ALL\"\n                    ],\n                    \"Next\": \"Fail\"\n                }\n            ]\n        },\n        \"WaitForAccountBuild\": {\n            \"Type\": \"Wait\",\n            \"Seconds\": 1800,\n            \"Next\": \"EditCloudCheckrCredentials\"\n        },\n        \"EditCloudCheckrCredentials\": {\n            \"Type\": \"Task\",\n            \"Resource\": \"${CloudCheckrEditCredentials}\",\n            \"Next\": \"Succeed\",\n            \"Catch\": [\n                {\n                    \"ErrorEquals\": [\n                        \"States.ALL\"\n                    ],\n                    \"Next\": \"Fail\"\n                }\n            ]\n        },\n        \"Succeed\": {\n            \"Type\": \"Succeed\"\n        },\n        \"Fail\": {\n            \"Type\": \"Fail\"\n        }\n    }\n}",
+                        {
+                            "CloudCheckrAddAccount": {
+                                "Fn::GetAtt": [
+                                    "CloudCheckrAddAccount",
+                                    "Arn"
+                                ]
+                            },
+                            "CloudCheckrEditCredentials": {
+                                "Fn::GetAtt": [
+                                    "CloudCheckrEditCredentials",
+                                    "Arn"
+                                ]
+                            },
+                            "SetupAccount": {
+                                "Fn::ImportValue": "DeployTemplatesInput"
+                            },
+                            "UpdatePolicy": {
+                                "Fn::GetAtt": [
+                                    "UpdatePolicy",
+                                    "Arn"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                "RoleArn": {
+                    "Fn::GetAtt": [
+                        "StateMachineRole",
+                        "Arn"
+                    ]
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,83 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "S3 Endpoints",
+    "Resources": {
+      "FunctionRole": {
+        "Type": "AWS::IAM::Role",
+        "Properties": {
+          "AssumeRolePolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Effect": "Allow",
+                "Principal": {
+                  "Service": "lambda.amazonaws.com"
+                },
+                "Action": "sts:AssumeRole"
+              }
+            ]
+          },
+          "ManagedPolicyArns": [
+            "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+          ],
+          "Policies": [
+            {
+              "PolicyDocument": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Action": [
+                      "ec2:DescribePrefixLists",
+                      "ec2:DescribeNetworkAcls",
+                      "ec2:CreateNetworkAclEntry"
+                    ],
+                    "Resource": [
+                      "*"
+                    ]
+                  }
+                ]
+              },
+              "PolicyName": "s3nacls"
+            }
+          ]
+        }
+      },
+      "Function": {
+        "Type": "AWS::Lambda::Function",
+        "Properties": {
+          "Code": {
+            "ZipFile": "\"use strict\";var AWS=require(\"aws-sdk\"),ec2=new AWS.EC2,vpcId=process.env.vpcId,describePrefixLists=function(){return console.log(\"describePrefixLists\"),new Promise(function(e,r){var t={Filters:[{Name:\"prefix-list-name\",Values:[\"com.amazonaws.ap-southeast-2.s3\"]}]};ec2.describePrefixLists(t,function(t,o){t?r(t):e(o)})})},describeNetworkAcls=function(){return console.log(\"describeNetworkAcls\"),new Promise(function(e,r){var t={Filters:[{Name:\"vpc-id\",Values:[vpcId]}]};ec2.describeNetworkAcls(t,function(t,o){t?r(t):e(o)})})},createNetworkAclEntry=function(e,r,t,o){return console.log(\"createNetworkAclEntry \"+e+\" \"+r+\" \"+t+\" \"+o),new Promise(function(n,i){var l={CidrBlock:e,Egress:r,NetworkAclId:o,PortRange:{From: r ? 443 : 1024,To: r ? 443 : 65535},Protocol:\"6\",RuleAction:\"allow\",RuleNumber:t};ec2.createNetworkAclEntry(l,function(e,r){e?i(e):n(r)})})};exports.handler=function(e,r,t){var o=[];describePrefixLists().then(function(e){return Array.prototype.push.apply(o,e.PrefixLists[0].Cidrs),console.log(\"\"+o),describeNetworkAcls()}).then(function(e){var r=[],n=!0,i=!1,l=void 0;try{for(var c,s=function(){var e=c.value,t=o.filter(function(r){var t=!0,o=!1,n=void 0;try{for(var i,l=e.Entries[Symbol.iterator]();!(t=(i=l.next()).done);t=!0){var c=i.value;if(r===c.CidrBlock)return!0}}catch(e){o=!0,n=e}finally{try{!t&&l.return&&l.return()}finally{if(o)throw n}}return!1});if(t.length===o.length)console.log(\"NACL entries match prefix list, nothing to do.\");else{console.log(\"NACL entries require update.\");var n=e.Entries.reduce(function(e,r){return r.RuleNumber>=500&&r.RuleNumber<600&&e<r.RuleNumber?r.RuleNumber:e},500);n++;var i=!0,l=!1,s=void 0;try{for(var a,u=o[Symbol.iterator]();!(i=(a=u.next()).done);i=!0){var f=a.value;r.push(createNetworkAclEntry(f,!0,n,e.NetworkAclId)),r.push(createNetworkAclEntry(f,!1,n,e.NetworkAclId)),n++}}catch(e){l=!0,s=e}finally{try{!i&&u.return&&u.return()}finally{if(l)throw s}}}},a=e.NetworkAcls[Symbol.iterator]();!(n=(c=a.next()).done);n=!0)s()}catch(e){i=!0,l=e}finally{try{!n&&a.return&&a.return()}finally{if(i)throw l}}Promise.all(r).then(function(){console.log(\"All done.\"),t(null)}).catch(function(e){console.log(\"NACL entries failed to update!\",e),t(e)})})};"
+          },
+          "Handler": "index.handler",
+          "MemorySize": 128,
+          "Role": {
+            "Fn::GetAtt": [
+              "FunctionRole",
+              "Arn"
+            ]
+          },
+          "Runtime": "nodejs4.3",
+          "Environment": {
+            "Variables": {
+              "vpcId": {
+                "Fn::ImportValue": "VPC"
+              }
+            }
+          }
+        }
+      },
+      "FunctionPermission": {
+        "Type": "AWS::Lambda::Permission",
+        "Properties": {
+          "Action": "lambda:InvokeFunction",
+          "Principal": "sns.amazonaws.com",
+          "SourceArn": "arn:aws:sns:us-east-1:806199016981:AmazonIpSpaceChanged",
+          "FunctionName": {
+            "Ref":"Function"
+          }
+        }
+      }
+    }
+  }
+  

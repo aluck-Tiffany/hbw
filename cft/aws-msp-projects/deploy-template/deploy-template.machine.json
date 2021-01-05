@@ -1,0 +1,161 @@
+{
+    "Comment": "Deploy Stack Machine",
+    "StartAt": "AssumeRole",
+    "States": {
+        "AssumeRole": {
+            "Type": "Task",
+            "Resource": "${DewfordAssumeRole.Arn}",
+            "ResultPath": "$.global.credentials",
+            "Next": "CreateChangeSet",
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "Fail"
+                }
+            ]
+        },
+        "CreateChangeSet": {
+            "Type": "Task",
+            "Resource": "${DewfordCreateChangeSet.Arn}",
+            "Next": "DescribeChangeSet",
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "Exists"
+                    ],
+                    "ResultPath": "$.local.template.error",
+                    "Next": "UpdatePass"
+                },
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "Fail"
+                }
+            ]
+        },
+        "UpdatePass": {
+            "Type": "Pass",
+            "Result": {
+                "update": true
+            },
+            "ResultPath": "$.local.template.update",
+            "Next": "CreateChangeSet"
+        },
+        "DescribeChangeSet": {
+            "Type": "Task",
+            "Resource": "${DewfordDescribeChangeSet.Arn}",
+            "Next": "HasDescribeChangeSetStatusCreateComplete",
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "Fail"
+                }
+            ],
+            "ResultPath": "$.local.changeSet"
+        },
+        "HasDescribeChangeSetStatusCreateComplete": {
+            "Type": "Choice",
+            "Choices": [
+                {
+                    "Variable": "$.local.changeSet.Status",
+                    "StringEquals": "CREATE_COMPLETE",
+                    "Next": "ExecuteChangeSet"
+                },
+                {
+                    "Variable": "$.local.changeSet.Status",
+                    "StringEquals": "FAILED",
+                    "Next": "HasDescribeChangeSetStatusReasonNoChanges"
+                }
+            ],
+            "Default": "WaitForDescribeChangeSetStatusCreateComplete"
+        },
+        "HasDescribeChangeSetStatusReasonNoChanges": {
+            "Type": "Choice",
+            "Choices": [
+                {
+                    "Variable": "$.local.changeSet.StatusReason",
+                    "StringEquals": "The submitted information didn't contain changes. Submit different information to create a change set.",
+                    "Next": "DeleteChangeSet"
+                }
+            ],
+            "Default": "Fail"
+        },
+        "WaitForDescribeChangeSetStatusCreateComplete": {
+            "Type": "Wait",
+            "Seconds": 5,
+            "Next": "DescribeChangeSet"
+        },
+        "ExecuteChangeSet": {
+            "Type": "Task",
+            "Resource": "${DewfordExecuteChangeSet.Arn}",
+            "Next": "DescribeStack",
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "Fail"
+                }
+            ]
+        },
+        "DeleteChangeSet": {
+            "Type": "Task",
+            "Resource": "${DewfordDeleteChangeSet.Arn}",
+            "Next": "Succeed",
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "Fail"
+                }
+            ]
+        },
+        "DescribeStack": {
+            "Type": "Task",
+            "Resource": "${DewfordDescribeStack.Arn}",
+            "Next": "HasDescribeStacksStackStatusCreateComplete",
+            "ResultPath": "$.local.stack",
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "Fail"
+                }
+            ]
+        },
+        "HasDescribeStacksStackStatusCreateComplete": {
+            "Type": "Choice",
+            "Choices": [
+                {
+                    "Variable": "$.local.stack.StackStatus",
+                    "StringEquals": "CREATE_COMPLETE",
+                    "Next": "Succeed"
+                },
+                {
+                    "Variable": "$.local.stack.StackStatus",
+                    "StringEquals": "UPDATE_COMPLETE",
+                    "Next": "Succeed"
+                }
+            ],
+            "Default": "Wait"
+        },
+        "Wait": {
+            "Type": "Wait",
+            "Seconds": 5,
+            "Next": "DescribeStack"
+        },
+        "Succeed": {
+            "Type": "Succeed"
+        },
+        "Fail": {
+            "Type": "Fail"
+        }
+    }
+}

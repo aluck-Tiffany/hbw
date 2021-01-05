@@ -1,0 +1,121 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Create S3 Bucket and IAM Instance Policy",
+  "Parameters": {
+    "BucketName": {
+      "Type": "String",
+      "Default": "S3 Bucket Name",
+      "Description": "Specify the S3 Bucket Name"
+    },
+    "CostCentreKey": {
+      "Type": "String",
+      "Default": "CostCentre Key Tag",
+      "Description": "Specify the S3 CostCentre Key Tag"
+    },
+    "IAMRoleName": {
+      "Type": "String",
+      "Default": "IAM Role Name",
+      "Description": "Specify the IAM Role Name that will have Read/Write access to the bucket. This will also be the policy name."
+    },
+    "InstanceProfileName": {
+      "Type": "String",
+      "Default": "IAM Instance Profile Name",
+      "Description": "Specify the IAM Instance Profile Name that will be attached to the IAM Role."
+    }
+  },
+  "Resources": {
+    "S3Bucket": {
+      "Type": "AWS::S3::Bucket",
+      "DeletionPolicy": "Retain",
+      "Properties": {
+        "BucketName": {
+          "Ref": "BucketName"
+        },
+        "Tags": [
+          {
+            "Key": "CostCentre",
+            "Value": {
+              "Ref": "CostCentreKey"
+            }
+          }
+        ]
+      }
+    },
+    "IAMRole": {
+      "Type": "AWS::IAM::Role",
+      "DeletionPolicy": "Retain",
+      "Properties": {
+        "RoleName": {
+          "Ref": "IAMRoleName"
+        },
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [
+                  "ec2.amazonaws.com"
+                ]
+              },
+              "Action": [
+                "sts:AssumeRole"
+              ]
+            }
+          ]
+        },
+        "Path": "/",
+        "Policies": [
+          {
+            "PolicyName": {
+              "Ref": "IAMRoleName"
+            },
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": "s3:ListAllMyBuckets*",
+                  "Resource": "arn:aws:s3:::*"
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "s3:*",
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:aws:s3:::${BucketName}"
+                    },
+                    {
+                      "Fn::Sub": "arn:aws:s3:::${BucketName}/*"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "IAMInstanceProfile": {
+      "Type": "AWS::IAM::InstanceProfile",
+      "DeletionPolicy": "Retain",
+      "Properties": {
+        "Path": "/",
+        "InstanceProfileName": {
+          "Ref": "InstanceProfileName"
+        },
+        "Roles": [
+          {
+            "Ref": "IAMRole"
+          }
+        ]
+      }
+    }
+  }
+}
+
+
+
+
+
+

@@ -1,0 +1,390 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Enforcement functions",
+  "Parameters": {
+    "RevokeSG": {
+      "Type": "String",
+      "Default": true
+    },
+    "TerminateInstances": {
+      "Type": "String",
+      "Default": false
+    },
+    "CreateTags": {
+      "Type": "String",
+      "Default": true
+    }
+  },
+  "Conditions": {
+    "isRevokeSG": {
+      "Fn::Equals": [
+        "true",
+        {
+          "Ref": "RevokeSG"
+        }
+      ]
+    },
+    "isTerminateInstances": {
+      "Fn::Equals": [
+        "true",
+        {
+          "Ref": "TerminateInstances"
+        }
+      ]
+    },
+    "isCreateTags": {
+      "Fn::Equals": [
+        "true",
+        {
+          "Ref": "CreateTags"
+        }
+      ]
+    }
+  },
+  "Resources": {
+    "RevokeSGFunction": {
+      "Condition": "isRevokeSG",
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Code": {
+          "ZipFile": "\"use strict\";var AWS=require(\"aws-sdk\");exports.handler=function(e,r,t){if(\"cloudformation.amazonaws.com\"===e.detail.userAgent||\"AWS Internal\"===e.detail.userAgent)t(null);else{var a={};a.GroupId=e.detail.requestParameters.groupId,a.IpPermissions=e.detail.requestParameters.ipPermissions.items;var i=function(e){return e.charAt(0).toUpperCase()+e.slice(1)},n=!0,s=!1,o=void 0;try{for(var l,u=a.IpPermissions[Symbol.iterator]();!(n=(l=u.next()).done);n=!0){var d=l.value;delete d.ipv6Ranges,delete d.prefixListIds;for(var v in d)d[i(v)]=d[v],delete d[v];if(d.IpRanges.items){d.IpRanges=d.IpRanges.items;var p=!0,f=!1,c=void 0;try{for(var y,m=d.IpRanges[Symbol.iterator]();!(p=(y=m.next()).done);p=!0){var I=y.value;for(var g in I)I[i(g)]=I[g],delete I[g]}}catch(e){f=!0,c=e}finally{try{!p&&m.return&&m.return()}finally{if(f)throw c}}}else delete d.IpRanges;if(d.Groups.items){d.UserIdGroupPairs=d.Groups.items;var h=!0,G=!1,S=void 0;try{for(var A,P=d.UserIdGroupPairs[Symbol.iterator]();!(h=(A=P.next()).done);h=!0){var w=A.value;for(var R in w)w[i(R)]=w[R],delete w[R]}}catch(e){G=!0,S=e}finally{try{!h&&P.return&&P.return()}finally{if(G)throw S}}}delete d.Groups}}catch(e){s=!0,o=e}finally{try{!n&&u.return&&u.return()}finally{if(s)throw o}}var x=new AWS.EC2;\"AuthorizeSecurityGroupIngress\"===e.detail.eventName?x.revokeSecurityGroupIngress(a,function(e,r){e?t(e):t(null,r)}):\"AuthorizeSecurityGroupEgress\"===e.detail.eventName?x.revokeSecurityGroupEgress(a,function(e,r){e?t(e):t(null,r)}):t(\"Unsupported CloudTrail Event\")}};\n"
+        },
+        "Description": "revoke-security-group-ingress-egress",
+        "FunctionName": "revoke-security-group-ingress-egress",
+        "Handler": "index.handler",
+        "MemorySize": "128",
+        "Timeout": "15",
+        "Runtime": "nodejs4.3",
+        "Role": {
+          "Fn::GetAtt": [
+            "RevokeSGRole",
+            "Arn"
+          ]
+        }
+      }
+    },
+    "RevokeSGRole": {
+      "Condition": "isRevokeSG",
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+        ],
+        "Policies": [
+          {
+            "PolicyName": "revoke-security-group-ingress-egress",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "ec2:RevokeSecurityGroupEgress",
+                    "ec2:RevokeSecurityGroupIngress"
+                  ],
+                  "Resource": [
+                    "*"
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "RoleName": "revoke-security-group-ingress-egress"
+      }
+    },
+    "RevokeSGPermission": {
+      "Condition": "isRevokeSG",
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "Action": "lambda:InvokeFunction",
+        "FunctionName": {
+          "Ref": "RevokeSGFunction"
+        },
+        "SourceArn": {
+          "Fn::GetAtt": [
+            "RevokeSGRule",
+            "Arn"
+          ]
+        },
+        "Principal": "events.amazonaws.com"
+      }
+    },
+    "RevokeSGRule": {
+      "Condition": "isRevokeSG",
+      "Type": "AWS::Events::Rule",
+      "Properties": {
+        "EventPattern": {
+          "detail-type": [
+            "AWS API Call via CloudTrail"
+          ],
+          "detail": {
+            "eventSource": [
+              "ec2.amazonaws.com"
+            ],
+            "eventName": [
+              "AuthorizeSecurityGroupEgress",
+              "AuthorizeSecurityGroupIngress"
+            ]
+          }
+        },
+        "Name": "revoke-security-group-ingress-egress",
+        "Targets": [
+          {
+            "Arn": {
+              "Fn::GetAtt": [
+                "RevokeSGFunction",
+                "Arn"
+              ]
+            },
+            "Id": "revoke-security-group-ingress-egress"
+          }
+        ]
+      }
+    },
+    "TerminateInstancesFunction": {
+      "Condition": "isTerminateInstances",
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Code": {
+          "ZipFile": "\"use strict\";var AWS=require(\"aws-sdk\"),ec2=new AWS.EC2;exports.handler=function(n,t,e){var r=function(n){return new Promise(function(t,e){ec2.describeInstances({InstanceIds:n},function(n,r){n?e(n):t(r)})})},a=function(n){return new Promise(function(t,e){ec2.modifyInstanceAttribute({InstanceId:n,DisableApiTermination:{Value:!1}},function(n,r){n?e(n):t(r)})})},i=function(n){return new Promise(function(t,e){ec2.terminateInstances({InstanceIds:n},function(n,r){n?e(n):t(r)})})},o=function(n){var t=!1,e=!0,r=!1,a=void 0;try{for(var i,o=n[Symbol.iterator]();!(e=(i=o.next()).done);e=!0){var l=i.value;\"CostCentre\"===l.Key&&(t=!0)}}catch(n){r=!0,a=n}finally{try{!e&&o.return&&o.return()}finally{if(r)throw a}}return t},l=function(n){var t=[],e=!0,r=!1,a=void 0;try{for(var i,l=n.Reservations[Symbol.iterator]();!(e=(i=l.next()).done);e=!0){var s=i.value,u=!0,c=!1,f=void 0;try{for(var v,y=s.Instances[Symbol.iterator]();!(u=(v=y.next()).done);u=!0){var d=v.value;o(d.Tags)||t.push(d.InstanceId)}}catch(n){c=!0,f=n}finally{try{!u&&y.return&&y.return()}finally{if(c)throw f}}}}catch(n){r=!0,a=n}finally{try{!e&&l.return&&l.return()}finally{if(r)throw a}}return t};if(\"StartInstances\"===n.detail.eventName||\"RunInstances\"===n.detail.eventName){var s=[];if(\"StartInstances\"===n.detail.eventName){var u=!0,c=!1,f=void 0;try{for(var v,y=n.detail.requestParameters.instancesSet.items[Symbol.iterator]();!(u=(v=y.next()).done);u=!0){var d=v.value;s.push(d.instanceId)}}catch(n){c=!0,f=n}finally{try{!u&&y.return&&y.return()}finally{if(c)throw f}}}if(\"RunInstances\"===n.detail.eventName){var h=!0,m=!1,I=void 0;try{for(var S,w=n.detail.responseElements.instancesSet.items[Symbol.iterator]();!(h=(S=w.next()).done);h=!0){var b=S.value;s.push(b.instanceId)}}catch(n){m=!0,I=n}finally{try{!h&&w.return&&w.return()}finally{if(m)throw I}}}r(s).then(function(n){var t=l(n);if(t.length>0){var r=[],o=!0,s=!1,u=void 0;try{for(var c,f=t[Symbol.iterator]();!(o=(c=f.next()).done);o=!0){var v=c.value;r.push(a(v))}}catch(n){s=!0,u=n}finally{try{!o&&f.return&&f.return()}finally{if(s)throw u}}Promise.all(r).then(function(){i(t).then(function(){e(null)})})}else e(null)})}else e(\"Unsupported CloudTrail Event\")};\n"
+        },
+        "Description": "terminate-instances",
+        "FunctionName": "terminate-instances",
+        "Handler": "index.handler",
+        "MemorySize": "128",
+        "Timeout": "15",
+        "Runtime": "nodejs4.3",
+        "Role": {
+          "Fn::GetAtt": [
+            "TerminateInstancesRole",
+            "Arn"
+          ]
+        }
+      }
+    },
+    "TerminateInstancesRole": {
+      "Condition": "isTerminateInstances",
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+        ],
+        "Policies": [
+          {
+            "PolicyName": "terminate-instances",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "ec2:DescribeInstances",
+                    "ec2:ModifyInstanceAttribute",
+                    "ec2:TerminateInstances"
+                  ],
+                  "Resource": [
+                    "*"
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "RoleName": "terminate-instances"
+      }
+    },
+    "TerminateInstancesPermission": {
+      "Condition": "isTerminateInstances",
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "Action": "lambda:InvokeFunction",
+        "FunctionName": {
+          "Ref": "TerminateInstancesFunction"
+        },
+        "SourceArn": {
+          "Fn::GetAtt": [
+            "TerminateInstancesRule",
+            "Arn"
+          ]
+        },
+        "Principal": "events.amazonaws.com"
+      }
+    },
+    "TerminateInstancesRule": {
+      "Condition": "isTerminateInstances",
+      "Type": "AWS::Events::Rule",
+      "Properties": {
+        "EventPattern": {
+          "detail-type": [
+            "AWS API Call via CloudTrail"
+          ],
+          "detail": {
+            "eventSource": [
+              "ec2.amazonaws.com"
+            ],
+            "eventName": [
+              "StartInstances",
+              "RunInstances"
+            ]
+          }
+        },
+        "Name": "terminate-instances",
+        "Targets": [
+          {
+            "Arn": {
+              "Fn::GetAtt": [
+                "TerminateInstancesFunction",
+                "Arn"
+              ]
+            },
+            "Id": "terminate-instances"
+          }
+        ]
+      }
+    },
+    "CreateTagsFunction": {
+      "Condition": "isCreateTags",
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Code": {
+          "ZipFile": "\"use strict\";var AWS=require(\"aws-sdk\"),ec2=new AWS.EC2,describeTags=function(e){return new Promise(function(t,n){ec2.describeTags({Filters:[{Name:\"resource-id\",Values:[e]}]},function(e,r){e?n(e):t(r.Tags)})})},getCostCentreTag=function(e){var t=!0,n=!1,r=void 0;try{for(var a,s=e[Symbol.iterator]();!(t=(a=s.next()).done);t=!0){var o=a.value;if(\"CostCentre\"===o.Key)return o.Value}}catch(e){n=!0,r=e}finally{try{!t&&s.return&&s.return()}finally{if(n)throw r}}},createTags=function(e,t){return new Promise(function(n,r){ec2.createTags({Resources:[t],Tags:[{Key:\"CostCentre\",Value:e}]},function(e,t){e?r(e):n(t)})})},tagResource=function(e,t){return new Promise(function(n){describeTags(t).then(function(t){var r=getCostCentreTag(t);createTags(r,e).then(function(){n()})})})},describeImages=function(e){return new Promise(function(t,n){ec2.describeImages({ImageIds:[e]},function(e,r){e?n(e):t(r)})})},describeInstances=function(e){return new Promise(function(t,n){ec2.describeInstances({InstanceIds:e},function(e,r){e?n(e):t(r)})})};exports.handler=function(e,t,n){switch(console.log(JSON.stringify(e)),e.detail.eventName){case\"StartInstances\":case\"RunInstances\":var r=[],a=!0,s=!1,o=void 0;try{for(var i,c=e.detail.responseElements.instancesSet.items[Symbol.iterator]();!(a=(i=c.next()).done);a=!0){var l=i.value;r.push(l.instanceId)}}catch(e){s=!0,o=e}finally{try{!a&&c.return&&c.return()}finally{if(s)throw o}}describeInstances(r).then(function(e){var t=[],r=!0,a=!1,s=void 0;try{for(var o,i=e.Reservations[Symbol.iterator]();!(r=(o=i.next()).done);r=!0){var c=o.value,l=!0,u=!1,d=void 0;try{for(var f,m=c.Instances[Symbol.iterator]();!(l=(f=m.next()).done);l=!0){var v=f.value,g=!0,I=!1,h=void 0;try{for(var y,p=v.BlockDeviceMappings[Symbol.iterator]();!(g=(y=p.next()).done);g=!0){var b=y.value;b.Ebs&&b.Ebs.VolumeId&&t.push(tagResource(b.Ebs.VolumeId,v.InstanceId))}}catch(e){I=!0,h=e}finally{try{!g&&p.return&&p.return()}finally{if(I)throw h}}}}catch(e){u=!0,d=e}finally{try{!l&&m.return&&m.return()}finally{if(u)throw d}}}}catch(e){a=!0,s=e}finally{try{!r&&i.return&&i.return()}finally{if(a)throw s}}Promise.all(t).then(function(){n(null)})});break;case\"CreateSnapshot\":tagResource(e.detail.responseElements.snapshotId,e.detail.requestParameters.volumeId).then(function(){n(null)});break;case\"CopySnapshot\":tagResource(e.detail.responseElements.snapshotId,e.detail.requestParameters.sourceSnapshotId).then(function(){n(null)});break;case\"CreateImage\":case\"CopyImage\":var u=\"CreateImage\"===e.detail.eventName?e.detail.requestParameters.instanceId:e.detail.requestParameters.sourceImageId;tagResource(e.detail.responseElements.imageId,u).then(function(){describeImages(e.detail.responseElements.imageId).then(function(t){var r=[];if(t.Images.length>0){var a=!0,s=!1,o=void 0;try{for(var i,c=t.Images[0].BlockDeviceMappings[Symbol.iterator]();!(a=(i=c.next()).done);a=!0){var l=i.value;l.Ebs&&l.Ebs.SnapshotId&&r.push(tagResource(l.Ebs.SnapshotId,e.detail.responseElements.imageId))}}catch(e){s=!0,o=e}finally{try{!a&&c.return&&c.return()}finally{if(s)throw o}}}Promise.all(r).then(function(){n(null)})})});break;case\"CreateVolume\":tagResource(e.detail.responseElements.volumeId,e.detail.requestParameters.snapshotId).then(function(){n(null)});break;default:n(\"Unsupported CloudTrail Event\")}};\n"
+        },
+        "Description": "create-tags",
+        "FunctionName": "create-tags",
+        "Handler": "index.handler",
+        "MemorySize": "128",
+        "Timeout": "15",
+        "Runtime": "nodejs4.3",
+        "Role": {
+          "Fn::GetAtt": [
+            "CreateTagsRole",
+            "Arn"
+          ]
+        }
+      }
+    },
+    "CreateTagsRole": {
+      "Condition": "isCreateTags",
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+        ],
+        "Policies": [
+          {
+            "PolicyName": "create-tags",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "ec2:DescribeImages",
+                    "ec2:DescribeInstances",
+                    "ec2:DescribeTags",
+                    "ec2:CreateTags"
+                  ],
+                  "Resource": [
+                    "*"
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "RoleName": "create-tags"
+      }
+    },
+    "CreateTagsPermission": {
+      "Condition": "isCreateTags",
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "Action": "lambda:InvokeFunction",
+        "FunctionName": {
+          "Ref": "CreateTagsFunction"
+        },
+        "SourceArn": {
+          "Fn::GetAtt": [
+            "CreateTagsRule",
+            "Arn"
+          ]
+        },
+        "Principal": "events.amazonaws.com"
+      }
+    },
+    "CreateTagsRule": {
+      "Condition": "isCreateTags",
+      "Type": "AWS::Events::Rule",
+      "Properties": {
+        "EventPattern": {
+          "detail-type": [
+            "AWS API Call via CloudTrail"
+          ],
+          "detail": {
+            "eventSource": [
+              "ec2.amazonaws.com"
+            ],
+            "eventName": [
+              "StartInstances",
+              "RunInstances",
+              "CreateImage",
+              "CopyImage",
+              "CreateSnapshot",
+              "CopySnapshot",
+              "CreateVolume"
+            ]
+          }
+        },
+        "Name": "create-tags",
+        "Targets": [
+          {
+            "Arn": {
+              "Fn::GetAtt": [
+                "CreateTagsFunction",
+                "Arn"
+              ]
+            },
+            "Id": "create-tags"
+          }
+        ]
+      }
+    }
+  }
+}

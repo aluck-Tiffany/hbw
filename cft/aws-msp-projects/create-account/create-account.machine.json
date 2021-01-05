@@ -1,0 +1,88 @@
+{
+    "Comment": "Deploy Stack Machine",
+    "StartAt": "CreateAccount",
+    "States": {
+        "CreateAccount": {
+            "Type": "Task",
+            "Resource": "${DewfordCreateAccount.Arn}",
+            "Next": "DescribeCreateAccountStatus",
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "Fail"
+                }
+            ],
+            "ResultPath": "$.local.account"
+        },
+        "DescribeCreateAccountStatus": {
+            "Type": "Task",
+            "Resource": "${DewfordDescribeCreateAccountStatus.Arn}",
+            "Next": "IsCreateAccountComplete",
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "Fail"
+                }
+            ],
+            "InputPath": "$.local.account",
+            "ResultPath": "$.local.account"
+        },
+        "IsCreateAccountComplete": {
+            "Type": "Choice",
+            "Choices": [
+                {
+                    "Variable": "$.local.account.State",
+                    "StringEquals": "SUCCEEDED",
+                    "Next": "CreateRole"
+                },
+                {
+                    "Variable": "$.local.account.State",
+                    "StringEquals": "FAILED",
+                    "Next": "Fail"
+                }
+            ],
+            "Default": "WaitForCreateAccountComplete"
+        },
+        "WaitForCreateAccountComplete": {
+            "Type": "Wait",
+            "Seconds": 5,
+            "Next": "DescribeCreateAccountStatus"
+        },
+        "CreateRole": {
+            "Type": "Task",
+            "Resource": "${CreateRole.Arn}",
+            "Next": "CfnSignal",
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "Fail"
+                }
+            ]
+        },
+        "CfnSignal": {
+            "Type": "Task",
+            "Resource": "${CfnSignal.Arn}",
+            "Next": "Succeed",
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "Fail"
+                }
+            ]
+        },
+        "Succeed": {
+            "Type": "Succeed"
+        },
+        "Fail": {
+            "Type": "Fail"
+        }
+    }
+}

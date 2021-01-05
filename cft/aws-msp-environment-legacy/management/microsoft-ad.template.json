@@ -1,0 +1,205 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Microsoft Active Directory",
+  "Parameters": {
+    "KeyPairName": {
+      "Description": "Public/private key pairs allow you to securely connect to your instance after it launches",
+      "Type": "AWS::EC2::KeyPair::KeyName"
+    },
+    "InstanceType": {
+      "Description": "Amazon EC2 instance type",
+      "Type": "String",
+      "Default": "t2.micro"
+    },
+    "ADServer1NetBIOSName": {
+      "Description": "NetBIOS name of the 1st AD Server (up to 15 characters)",
+      "Type": "String",
+      "Default": "DC1",
+      "MinLength": "1",
+      "MaxLength": "15",
+      "AllowedPattern": "[a-zA-Z0-9]+"
+    },
+    "ADServer2NetBIOSName": {
+      "Description": "NetBIOS name of the 2nd AD Server (up to 15 characters)",
+      "Type": "String",
+      "Default": "DC2",
+      "MinLength": "1",
+      "MaxLength": "15",
+      "AllowedPattern": "[a-zA-Z0-9]+"
+    },
+    "CostCentre": {
+      "Description": "CostCentre",
+      "Type": "String"
+    },
+    "ImageId": {
+      "Description": "Windows 2012 R2 AMI ID",
+      "Type": "String"
+    },
+    "DomainName": {
+      "Type": "String"
+    }
+  },
+  "Resources": {
+    "DomainController1": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "ImageId": {
+          "Ref": "ImageId"
+        },
+        "InstanceType": {
+          "Ref": "InstanceType"
+        },
+        "SubnetId": {
+          "Fn::ImportValue": "RestrictedASubnet"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Ref": "ADServer1NetBIOSName"
+            }
+          },
+          {
+            "Key": "CostCentre",
+            "Value": {
+              "Ref": "CostCentre"
+            }
+          }
+        ],
+        "BlockDeviceMappings": [
+          {
+            "DeviceName": "/dev/sda1",
+            "Ebs": {
+              "VolumeSize": "100",
+              "VolumeType": "gp2"
+            }
+          }
+        ],
+        "SecurityGroupIds": [
+          {
+            "Ref": "DomainController1SG"
+          }
+        ],
+        "KeyName": {
+          "Ref": "KeyPairName"
+        }
+      }
+    },
+    "DomainController2": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "ImageId": {
+          "Ref": "ImageId"
+        },
+        "InstanceType": {
+          "Ref": "InstanceType"
+        },
+        "SubnetId": {
+          "Fn::ImportValue": "RestrictedBSubnet"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Ref": "ADServer2NetBIOSName"
+            }
+          },
+          {
+            "Key": "CostCentre",
+            "Value": {
+              "Ref": "CostCentre"
+            }
+          }
+        ],
+        "BlockDeviceMappings": [
+          {
+            "DeviceName": "/dev/sda1",
+            "Ebs": {
+              "VolumeSize": "100",
+              "VolumeType": "gp2"
+            }
+          }
+        ],
+        "SecurityGroupIds": [
+          {
+            "Ref": "DomainController2SG"
+          }
+        ],
+        "KeyName": {
+          "Ref": "KeyPairName"
+        }
+      }
+    },
+    "DomainController1SG": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Domain Controller",
+        "VpcId": {
+          "Fn::ImportValue": "VPC"
+        },
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "-1",
+            "FromPort": "0",
+            "ToPort": "0",
+            "CidrIp": {
+              "Fn::ImportValue": "VPCCidrBlock"
+            }
+          }
+        ]
+      }
+    },
+    "DomainController2SG": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Domain Controller",
+        "VpcId": {
+          "Fn::ImportValue": "VPC"
+        },
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "-1",
+            "FromPort": "0",
+            "ToPort": "0",
+            "CidrIp": {
+              "Fn::ImportValue": "VPCCidrBlock"
+            }
+          }
+        ]
+      }
+    },
+    "DHCPOptions": {
+      "Type": "AWS::EC2::DHCPOptions",
+      "Properties": {
+        "DomainName": {
+          "Ref": "DomainName"
+        },
+        "DomainNameServers": [
+          {
+            "Fn::GetAtt": [
+              "DomainController1",
+              "PrivateIp"
+            ]
+          },
+          {
+            "Fn::GetAtt": [
+              "DomainController2",
+              "PrivateIp"
+            ]
+          }
+        ]
+      }
+    },
+    "VPCDHCPOptionsAssociation": {
+      "Type": "AWS::EC2::VPCDHCPOptionsAssociation",
+      "Properties": {
+        "DhcpOptionsId": {
+          "Ref": "DHCPOptions"
+        },
+        "VpcId": {
+          "Fn::ImportValue": "VPC"
+        }
+      }
+    }
+  }
+}

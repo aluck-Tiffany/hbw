@@ -1,0 +1,223 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Deploy Templates",
+    "Parameters": {
+        "CICDBucket": {
+            "Description": "CI/CD Functions Bucket",
+            "Type": "String"
+        },
+        "DewfordAssumeRoleVersion": {
+            "Type": "String",
+            "Default": "latest"
+        },
+        "DewfordExecuteStepFunctionVersion": {
+            "Type": "String",
+            "Default": "latest"
+        },
+        "DewfordDescribeStepFunctionExecutionVersion": {
+            "Type": "String",
+            "Default": "latest"
+        },
+        "DeployTemplatesVersion": {
+            "Type": "String",
+            "Default": "latest"
+        }
+    },
+    "Resources": {
+        "FunctionRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": "lambda.amazonaws.com"
+                            },
+                            "Action": "sts:AssumeRole"
+                        }
+                    ]
+                },
+                "ManagedPolicyArns": [
+                    "arn:aws:iam::aws:policy/AdministratorAccess"
+                ],
+                "Policies": [
+                    {
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": {
+                                "Effect": "Allow",
+                                "Action": "sts:AssumeRole",
+                                "Resource": "*"
+                            }
+                        },
+                        "PolicyName": "AssumeRole"
+                    }
+                ]
+            }
+        },
+        "DewfordAssumeRole": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Code": {
+                    "S3Bucket": {
+                        "Ref": "CICDBucket"
+                    },
+                    "S3Key": {
+                        "Fn::Sub": "aws-msp-dewford/DewfordAssumeRole/${DewfordAssumeRoleVersion}/function.zip"
+                    }
+                },
+                "Handler": "index.handler",
+                "MemorySize": 128,
+                "Role": {
+                    "Fn::GetAtt": [
+                        "FunctionRole",
+                        "Arn"
+                    ]
+                },
+                "Runtime": "nodejs6.10",
+                "Timeout": 5
+            }
+        },
+        "DewfordExecuteStepFunction": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Code": {
+                    "S3Bucket": {
+                        "Ref": "CICDBucket"
+                    },
+                    "S3Key": {
+                        "Fn::Sub": "aws-msp-dewford/DewfordExecuteStepFunction/${DewfordExecuteStepFunctionVersion}/function.zip"
+                    }
+                },
+                "Handler": "index.handler",
+                "MemorySize": 128,
+                "Role": {
+                    "Fn::GetAtt": [
+                        "FunctionRole",
+                        "Arn"
+                    ]
+                },
+                "Runtime": "nodejs6.10",
+                "Timeout": 5
+            }
+        },
+        "DewfordDescribeStepFunctionExecution": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Code": {
+                    "S3Bucket": {
+                        "Ref": "CICDBucket"
+                    },
+                    "S3Key": {
+                        "Fn::Sub": "aws-msp-dewford/DewfordDescribeStepFunctionExecution/${DewfordDescribeStepFunctionExecutionVersion}/function.zip"
+                    }
+                },
+                "Handler": "index.handler",
+                "MemorySize": 128,
+                "Role": {
+                    "Fn::GetAtt": [
+                        "FunctionRole",
+                        "Arn"
+                    ]
+                },
+                "Runtime": "nodejs6.10",
+                "Timeout": 5
+            }
+        },
+        "DeployTemplates": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Code": {
+                    "S3Bucket": {
+                        "Ref": "CICDBucket"
+                    },
+                    "S3Key": {
+                        "Fn::Sub": "aws-msp-projects/deploy-templates/${DeployTemplatesVersion}/function.zip"
+                    }
+                },
+                "Handler": "index.handler",
+                "MemorySize": 128,
+                "Role": {
+                    "Fn::GetAtt": [
+                        "FunctionRole",
+                        "Arn"
+                    ]
+                },
+                "Runtime": "nodejs6.10",
+                "Timeout": 5,
+                "Environment": {
+                    "Variables": {
+                        "deployTemplateMachine": {
+                            "Fn::ImportValue": "DeployTemplateMachine"
+                        }
+                    }
+                }
+            }
+        },
+        "StateMachineRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": {
+                                    "Fn::Sub": "states.${AWS::Region}.amazonaws.com"
+                                }
+                            },
+                            "Action": "sts:AssumeRole"
+                        }
+                    ]
+                },
+                "Policies": [
+                    {
+                        "PolicyName": {
+                            "Fn::Sub": "${AWS::StackName}"
+                        },
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "lambda:InvokeFunction"
+                                    ],
+                                    "Resource": "*"
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "StateMachine": {
+            "Type": "AWS::StepFunctions::StateMachine",
+            "Properties": {
+                "DefinitionString": {
+                    "Fn::Sub": "{\n    \"Comment\": \"Deploy Stack Machine\",\n    \"StartAt\": \"SetTemplateToDeploy\",\n    \"States\": {\n        \"SetTemplateToDeploy\": {\n            \"Type\": \"Task\",\n            \"Resource\": \"${DeployTemplates.Arn}\",\n            \"Next\": \"DeployTemplate\",\n            \"Catch\": [\n                {\n                    \"ErrorEquals\": [\n                        \"States.ALL\"\n                    ],\n                    \"Next\": \"Fail\"\n                }\n            ]\n        },\n        \"DeployTemplate\": {\n            \"Type\": \"Task\",\n            \"Resource\": \"${DewfordExecuteStepFunction.Arn}\",\n            \"Next\": \"DescribeTemplateDeployment\",\n            \"Catch\": [\n                {\n                    \"ErrorEquals\": [\n                        \"States.ALL\"\n                    ],\n                    \"Next\": \"Fail\"\n                }\n            ],\n            \"ResultPath\": \"$.local.execution\"\n        },\n        \"DescribeTemplateDeployment\": {\n            \"Type\": \"Task\",\n            \"Resource\": \"${DewfordDescribeStepFunctionExecution.Arn}\",\n            \"Next\": \"HasDeployTemplateComplete\",\n            \"Catch\": [\n                {\n                    \"ErrorEquals\": [\n                        \"States.ALL\"\n                    ],\n                    \"Next\": \"Fail\"\n                }\n            ],\n            \"ResultPath\": \"$.local.execution\"\n        },\n        \"HasDeployTemplateComplete\": {\n            \"Type\": \"Choice\",\n            \"Choices\": [\n                {\n                    \"Variable\": \"$.local.execution.status\",\n                    \"StringEquals\": \"SUCCEEDED\",\n                    \"Next\": \"HasDeployTemplatesComplete\"\n                },\n                {\n                    \"Variable\": \"$.local.execution.status\",\n                    \"StringEquals\": \"FAILED\",\n                    \"Next\": \"Fail\"\n                }\n            ],\n            \"Default\": \"Wait\"\n        },\n        \"HasDeployTemplatesComplete\": {\n            \"Type\": \"Choice\",\n            \"Choices\": [\n                {\n                    \"Variable\": \"$.global.templatesIndex\",\n                    \"NumericEquals\": -1,\n                    \"Next\": \"Succeed\"\n                }\n            ],\n            \"Default\": \"SetTemplateToDeploy\"\n        },\n        \"Wait\": {\n            \"Type\": \"Wait\",\n            \"Seconds\": 5,\n            \"Next\": \"DescribeTemplateDeployment\"\n        },\n        \"Succeed\": {\n            \"Type\": \"Succeed\"\n        },\n        \"Fail\": {\n            \"Type\": \"Fail\"\n        }\n    }\n}"
+                },
+                "RoleArn": {
+                    "Fn::GetAtt": [
+                        "StateMachineRole",
+                        "Arn"
+                    ]
+                }
+            }
+        }
+    },
+    "Outputs": {
+        "DeployTemplatesMachine": {
+            "Description": "DeployTemplatesMachine",
+            "Value": {
+                "Ref": "StateMachine"
+            },
+            "Export": {
+                "Name": "DeployTemplatesMachine"
+            }
+        }
+    }
+}

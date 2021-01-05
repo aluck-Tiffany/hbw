@@ -1,0 +1,496 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "VPC",
+  "Parameters": {
+    "Name": {
+      "Type": "String",
+      "Default": "Customer Environment",
+      "Description": "Specify the customer name and environment, e.g. Datacom Production"
+    },
+    "VPCIdentifier": {
+      "Type": "String",
+      "Description": "Specify the VPC Identifier - This is only to be used if more than one VPC is being deployed into the account"
+    },
+    "VPCCidrBlock": {
+      "Type": "String"
+    },
+    "ControlledASubnetCidrBlock": {
+      "Type": "String"
+    },
+    "ControlledBSubnetCidrBlock": {
+      "Type": "String"
+    },
+    "ControlledCSubnetCidrBlock": {
+      "Type": "String"
+    },
+    "RestrictedASubnetCidrBlock": {
+      "Type": "String"
+    },
+    "RestrictedBSubnetCidrBlock": {
+      "Type": "String"
+    },
+    "RestrictedCSubnetCidrBlock": {
+      "Type": "String"
+    },
+    "SecuredASubnetCidrBlock": {
+      "Type": "String"
+    },
+    "SecuredBSubnetCidrBlock": {
+      "Type": "String"
+    }
+  },
+  "Resources": {
+    "VPC": {
+      "Type": "AWS::EC2::VPC",
+      "Properties": {
+        "CidrBlock": {
+          "Ref": "VPCCidrBlock"
+        },
+        "EnableDnsSupport": true,
+        "EnableDnsHostnames": true,
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                " ",
+                [
+                  {
+                    "Ref": "Name"
+                  },
+                  "VPC"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "ControlledASubnet": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "CidrBlock": {
+          "Ref": "ControlledASubnetCidrBlock"
+        },
+        "AvailabilityZone": "ap-southeast-2a",
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                " ",
+                [
+                  {
+                    "Ref": "Name"
+                  },
+                  "Controlled A Subnet"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "ControlledBSubnet": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "CidrBlock": {
+          "Ref": "ControlledBSubnetCidrBlock"
+        },
+        "AvailabilityZone": "ap-southeast-2b",
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                " ",
+                [
+                  {
+                    "Ref": "Name"
+                  },
+                  "Controlled B Subnet"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "ControlledCSubnet": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "CidrBlock": {
+          "Ref": "ControlledCSubnetCidrBlock"
+        },
+        "AvailabilityZone": "ap-southeast-2c",
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                " ",
+                [
+                  {
+                    "Ref": "Name"
+                  },
+                  "Controlled C Subnet"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "RestrictedASubnet": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "CidrBlock": {
+          "Ref": "RestrictedASubnetCidrBlock"
+        },
+        "AvailabilityZone": "ap-southeast-2a",
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                " ",
+                [
+                  {
+                    "Ref": "Name"
+                  },
+                  "Restricted A Subnet"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "RestrictedBSubnet": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "CidrBlock": {
+          "Ref": "RestrictedBSubnetCidrBlock"
+        },
+        "AvailabilityZone": "ap-southeast-2b",
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                " ",
+                [
+                  {
+                    "Ref": "Name"
+                  },
+                  "Restricted B Subnet"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "RestrictedCSubnet": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "CidrBlock": {
+          "Ref": "RestrictedCSubnetCidrBlock"
+        },
+        "AvailabilityZone": "ap-southeast-2c",
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                " ",
+                [
+                  {
+                    "Ref": "Name"
+                  },
+                  "Restricted C Subnet"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "SecuredASubnet": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "CidrBlock": {
+          "Ref": "SecuredASubnetCidrBlock"
+        },
+        "AvailabilityZone": "ap-southeast-2a",
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                " ",
+                [
+                  {
+                    "Ref": "Name"
+                  },
+                  "Secured A Subnet"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "SecuredBSubnet": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "CidrBlock": {
+          "Ref": "SecuredBSubnetCidrBlock"
+        },
+        "AvailabilityZone": "ap-southeast-2b",
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                " ",
+                [
+                  {
+                    "Ref": "Name"
+                  },
+                  "Secured B Subnet"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "InternetGateway": {
+      "Type": "AWS::EC2::InternetGateway",
+      "Properties": {
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                " ",
+                [
+                  {
+                    "Ref": "Name"
+                  },
+                  "Internet Gateway"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "AttachGateway": {
+      "Type": "AWS::EC2::VPCGatewayAttachment",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "InternetGatewayId": {
+          "Ref": "InternetGateway"
+        }
+      }
+    },
+    "VPNGateway": {
+      "Type": "AWS::EC2::VPNGateway",
+      "Properties": {
+        "Type": "ipsec.1",
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                " ",
+                [
+                  {
+                    "Ref": "Name"
+                  },
+                  "VGW"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "VPCGatewayAttachment": {
+      "Type": "AWS::EC2::VPCGatewayAttachment",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "VpnGatewayId": {
+          "Ref": "VPNGateway"
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "VPC": {
+      "Description": "VPC Logical ID",
+      "Value": {
+        "Ref": "VPC"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "VPC${VPCIdentifier}"
+        }
+      }
+    },
+    "VPCCidrBlock": {
+      "Description": "VPC CIDR",
+      "Value": {
+        "Fn::GetAtt": [
+          "VPC",
+          "CidrBlock"
+        ]
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "VPCCidrBlock${VPCIdentifier}"
+        }
+      }
+    },
+    "ControlledASubnet": {
+      "Description": "Controlled A Subnet Logical ID",
+      "Value": {
+        "Ref": "ControlledASubnet"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "ControlledASubnet${VPCIdentifier}"
+        }
+      }
+    },
+    "ControlledBSubnet": {
+      "Description": "Controlled B Subnet Logical ID",
+      "Value": {
+        "Ref": "ControlledBSubnet"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "ControlledBSubnet${VPCIdentifier}"
+        }
+      }
+    },
+    "ControlledCSubnet": {
+      "Description": "Controlled C Subnet Logical ID",
+      "Value": {
+        "Ref": "ControlledCSubnet"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "ControlledCSubnet${VPCIdentifier}"
+        }
+      }
+    },
+    "RestrictedASubnet": {
+      "Description": "Restricted A Subnet Logical ID",
+      "Value": {
+        "Ref": "RestrictedASubnet"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "RestrictedASubnet${VPCIdentifier}"
+        }
+      }
+    },
+    "RestrictedBSubnet": {
+      "Description": "Restricted B Subnet Logical ID",
+      "Value": {
+        "Ref": "RestrictedBSubnet"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "RestrictedBSubnet${VPCIdentifier}"
+        }
+      }
+    },
+    "RestrictedCSubnet": {
+      "Description": "Restricted C Subnet Logical ID",
+      "Value": {
+        "Ref": "RestrictedCSubnet"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "RestrictedCSubnet${VPCIdentifier}"
+        }
+      }
+    },
+    "SecuredASubnet": {
+      "Description": "Secured A Subnet Logical ID",
+      "Value": {
+        "Ref": "SecuredASubnet"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "SecuredASubnet${VPCIdentifier}"
+        }
+      }
+    },
+    "SecuredBSubnet": {
+      "Description": "Secured B Subnet Logical ID",
+      "Value": {
+        "Ref": "SecuredBSubnet"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "SecuredBSubnet${VPCIdentifier}"
+        }
+      }
+    },
+    "VPNGateway": {
+      "Description": "Gateway ID",
+      "Value": {
+        "Ref": "VPNGateway"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "VPNGateway${VPCIdentifier}"
+        }
+      }
+    },
+    "InternetGateway": {
+      "Description": "Internet Gateway ID",
+      "Value": {
+        "Ref": "InternetGateway"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "InternetGateway${VPCIdentifier}"
+        }
+      }
+    }
+  }
+}

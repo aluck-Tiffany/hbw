@@ -1,0 +1,866 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Creates EC2 Instance Based on User Parameter Input",
+  "Metadata": {
+    "AWS::CloudFormation::Interface": {
+      "ParameterGroups": [
+        {
+          "Label": {
+            "default": "Amazon EC2 Configuration"
+          },
+          "Parameters": [
+            "InstanceType",
+            "AMIID",
+            "AmazonAMI",
+            "RootVolSize",
+            "DataVolume1",
+            "DataVolume2",
+            "DataVolume3",
+            "DataVolume4",
+            "DataVolume5",
+            "DataVolume6",
+            "SecurityGroupIds",
+            "Subnet",
+            "ManualIPAssign",
+            "Key",
+            "UserData"
+          ]
+        },
+        {
+          "Label": {
+            "default": "Instance Tags"
+          },
+          "Parameters": [
+            "NameTag",
+            "CostCentreTag",
+            "CPMPolicyTag"
+          ]
+        }
+      ],
+      "ParameterLabels": {
+        "Subnet": {
+          "default": "Subnet"
+        },
+        "SecurityGroupIds": {
+          "default": "Security Group ID's"
+        },
+        "ManualIPAssign": {
+          "default": "Manual IP Address"
+        },
+        "NameTag": {
+          "default": "Name Tag"
+        },
+        "CostCentreTag": {
+          "default": "Cost Centre Tag"
+        },
+        "CPMPolicyTag": {
+          "default": "CPM Backup Policy Tag"
+        },
+        "AMIID": {
+          "default": "AMI ID"
+        },
+        "InstanceType": {
+          "default": "Instance Type"
+        },
+        "DataVolume1": {
+          "default": "Data Volume 1"
+        },
+        "DataVolume2": {
+          "default": "Data Volume 2"
+        },
+        "DataVolume3": {
+          "default": "Data Volume 3"
+        },
+        "DataVolume4": {
+          "default": "Data Volume 4"
+        },
+        "DataVolume5": {
+          "default": "Data Volume 5"
+        },
+        "DataVolume6": {
+          "default": "Data Volume 6"
+        },
+        "RootVolSize": {
+          "default": "Root Volume Size"
+        },
+        "AmazonAMI": {
+          "default": "Amazon AMI"
+        },
+        "UserData": {
+          "default": "User Data"
+        }
+      }
+    }
+  },
+  "Parameters": {
+    "AMIID": {
+      "Type": "String",
+      "Description": "Specify the AMI ID"
+    },
+    "InstanceType": {
+      "Type": "String",
+      "AllowedValues": [
+        "t2.nano",
+        "t2.micro",
+        "t2.small",
+        "t2.medium",
+        "t2.large",
+        "t2.xlarge",
+        "t2.2xlarge",
+        "m4.large",
+        "m4.xlarge",
+        "m4.2xlarge",
+        "m4.4xlarge",
+        "c4.large",
+        "c4.xlarge",
+        "c4.2xlarge",
+        "c4.4xlarge",
+        "r4.large",
+        "r4.xlarge",
+        "r4.2xlarge"
+      ]
+    },
+    "DataVolume1": {
+      "Type": "String",
+      "Description": "Specify the size of the Data Volume (Leave as blank if not required)",
+      "Default": ""
+    },
+    "DataVolume2": {
+      "Type": "String",
+      "Description": "Specify the size of the Data Volume (Leave as blank if not required)",
+      "Default": ""
+    },
+    "DataVolume3": {
+      "Type": "String",
+      "Description": "Specify the size of the Data Volume (Leave as blank if not required)",
+      "Default": ""
+    },
+    "DataVolume4": {
+      "Type": "String",
+      "Description": "Specify the size of the Data Volume (Leave as blank if not required)",
+      "Default": ""
+    },
+    "DataVolume5": {
+      "Type": "String",
+      "Description": "Specify the size of the Data Volume (Leave as blank if not required)",
+      "Default": ""
+    },
+    "DataVolume6": {
+      "Type": "String",
+      "Description": "Specify the size of the Data Volume (Leave as blank if not required)",
+      "Default": ""
+    },
+    "SecurityGroupIds": {
+      "Type": "List<AWS::EC2::SecurityGroup::Id>",
+      "Default": ""
+    },
+    "Subnet": {
+      "Type": "AWS::EC2::Subnet::Id",
+      "Default": ""
+    },
+    "ManualIPAssign": {
+      "Type": "String",
+      "Description": "Specify a manual IP address (Leave as blank if not required)",
+      "Default": ""
+    },
+    "Key": {
+      "Type": "AWS::EC2::KeyPair::KeyName",
+      "Description": "Select an existing key pair to use for connecting to your Instances",
+      "MinLength": "1",
+      "MaxLength": "255"
+    },
+    "NameTag": {
+      "Type": "String",
+      "Default": "<Instance Name>"
+    },
+    "CostCentreTag": {
+      "Type": "String",
+      "Default": "DASG4000"
+    },
+    "CPMPolicyTag": {
+      "Type": "String",
+      "Default": "daily weekly monthly yearly"
+    },
+    "UserData": {
+      "Type": "String",
+      "Description": "Specify the User Data Template Snippet. Leave as default (IMPORTANT!) if no user data is required",
+      "Default": "s3://760584908251-public/blank.json"
+    },
+    "AmazonAMI": {
+      "Type": "String",
+      "Description": "Set to true if launching an Amazon Linux AMI",
+      "Default": "false"
+    },
+    "RootVolSize": {
+      "Type": "String",
+      "Description": "Leave Blank for Default AMI Size",
+      "Default": ""
+    }
+  },
+  "Conditions": {
+    "CreateDataVolume1": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "DataVolume1"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "CreateDataVolume2": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "DataVolume2"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "CreateDataVolume3": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "DataVolume3"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "CreateDataVolume4": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "DataVolume4"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "CreateDataVolume5": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "DataVolume5"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "CreateDataVolume6": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "DataVolume6"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "ManualIPAssignCond": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "ManualIPAssign"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "AmazonAMICond": {
+      "Fn::Equals": [
+        {
+          "Ref": "AmazonAMI"
+        },
+        "true"
+      ]
+    },
+    "RootVolSizeCond": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "RootVolSize"
+            },
+            ""
+          ]
+        }
+      ]
+    }
+  },
+  "Resources": {
+    "Instance": {
+      "Type": "AWS::EC2::Instance",
+      "DeletionPolicy": "Retain",
+      "Properties": {
+        "BlockDeviceMappings": [
+          {
+            "DeviceName": {
+              "Fn::If": [
+                "AmazonAMICond",
+                "/dev/xvda",
+                "/dev/sda1"
+              ]
+            },
+            "Ebs": {
+              "VolumeType": "gp2",
+              "DeleteOnTermination": "true",
+              "VolumeSize": {
+                "Fn::If": [
+                  "RootVolSizeCond",
+                  {
+                    "Ref": "RootVolSize"
+                  },
+                  {
+                    "Ref": "AWS::NoValue"
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        "ImageId": {
+          "Ref": "AMIID"
+        },
+        "SubnetId": {
+          "Ref": "Subnet"
+        },
+        "SecurityGroupIds": {
+          "Ref": "SecurityGroupIds"
+        },
+        "PrivateIpAddress": {
+          "Fn::If": [
+            "ManualIPAssignCond",
+            {
+              "Ref": "ManualIPAssign"
+            },
+            {
+              "Ref": "AWS::NoValue"
+            }
+          ]
+        },
+        "UserData": {
+          "Fn::Transform": {
+            "Name": "AWS::Include",
+            "Parameters": {
+              "Location": {
+                "Ref": "UserData"
+              }
+            }
+          }
+        },
+        "InstanceType": {
+          "Ref": "InstanceType"
+        },
+        "KeyName": {
+          "Ref": "Key"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Ref": "NameTag"
+            }
+          },
+          {
+            "Key": "CostCentre",
+            "Value": {
+              "Ref": "CostCentreTag"
+            }
+          },
+          {
+            "Key": "cpm backup",
+            "Value": {
+              "Ref": "CPMPolicyTag"
+            }
+          }
+        ]
+      }
+    },
+    "MountPoint1": {
+      "Condition": "CreateDataVolume1",
+      "Type": "AWS::EC2::VolumeAttachment",
+      "DeletionPolicy": "Retain",
+      "Properties": {
+        "InstanceId": {
+          "Ref": "Instance"
+        },
+        "VolumeId": {
+          "Ref": "DataVolume1Provision"
+        },
+        "Device": "/dev/sdf"
+      }
+    },
+    "DataVolume1Provision": {
+      "Condition": "CreateDataVolume1",
+      "Type": "AWS::EC2::Volume",
+      "DeletionPolicy": "Retain",
+      "Properties": {
+        "Size": {
+          "Ref": "DataVolume1"
+        },
+        "Encrypted": "true",
+        "KmsKeyId": {
+          "Fn::ImportValue": "KMSKeyID"
+        },
+        "VolumeType": "gp2",
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Ref": "NameTag"
+            }
+          },
+          {
+            "Key": "CostCentre",
+            "Value": {
+              "Ref": "CostCentreTag"
+            }
+          }
+        ],
+        "AvailabilityZone": {
+          "Fn::GetAtt": [
+            "Instance",
+            "AvailabilityZone"
+          ]
+        }
+      }
+    },
+    "MountPoint2": {
+      "Condition": "CreateDataVolume2",
+      "Type": "AWS::EC2::VolumeAttachment",
+      "DeletionPolicy": "Retain",
+      "Properties": {
+        "InstanceId": {
+          "Ref": "Instance"
+        },
+        "VolumeId": {
+          "Ref": "DataVolume2Provision"
+        },
+        "Device": "/dev/sdg"
+      }
+    },
+    "DataVolume2Provision": {
+      "Condition": "CreateDataVolume2",
+      "Type": "AWS::EC2::Volume",
+      "DeletionPolicy": "Retain",
+      "Properties": {
+        "Size": {
+          "Ref": "DataVolume2"
+        },
+        "Encrypted": "true",
+        "KmsKeyId": {
+          "Fn::ImportValue": "KMSKeyID"
+        },
+        "VolumeType": "gp2",
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Ref": "NameTag"
+            }
+          },
+          {
+            "Key": "CostCentre",
+            "Value": {
+              "Ref": "CostCentreTag"
+            }
+          }
+        ],
+        "AvailabilityZone": {
+          "Fn::GetAtt": [
+            "Instance",
+            "AvailabilityZone"
+          ]
+        }
+      }
+    },
+    "MountPoint3": {
+      "Condition": "CreateDataVolume3",
+      "Type": "AWS::EC2::VolumeAttachment",
+      "DeletionPolicy": "Retain",
+      "Properties": {
+        "InstanceId": {
+          "Ref": "Instance"
+        },
+        "VolumeId": {
+          "Ref": "DataVolume3Provision"
+        },
+        "Device": "/dev/sdh"
+      }
+    },
+    "DataVolume3Provision": {
+      "Condition": "CreateDataVolume3",
+      "Type": "AWS::EC2::Volume",
+      "DeletionPolicy": "Retain",
+      "Properties": {
+        "Size": {
+          "Ref": "DataVolume3"
+        },
+        "Encrypted": "true",
+        "KmsKeyId": {
+          "Fn::ImportValue": "KMSKeyID"
+        },
+        "VolumeType": "gp2",
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Ref": "NameTag"
+            }
+          },
+          {
+            "Key": "CostCentre",
+            "Value": {
+              "Ref": "CostCentreTag"
+            }
+          }
+        ],
+        "AvailabilityZone": {
+          "Fn::GetAtt": [
+            "Instance",
+            "AvailabilityZone"
+          ]
+        }
+      }
+    },
+    "MountPoint4": {
+      "Condition": "CreateDataVolume4",
+      "Type": "AWS::EC2::VolumeAttachment",
+      "DeletionPolicy": "Retain",
+      "Properties": {
+        "InstanceId": {
+          "Ref": "Instance"
+        },
+        "VolumeId": {
+          "Ref": "DataVolume4Provision"
+        },
+        "Device": "/dev/sdi"
+      }
+    },
+    "DataVolume4Provision": {
+      "Condition": "CreateDataVolume4",
+      "Type": "AWS::EC2::Volume",
+      "DeletionPolicy": "Retain",
+      "Properties": {
+        "Size": {
+          "Ref": "DataVolume4"
+        },
+        "Encrypted": "true",
+        "KmsKeyId": {
+          "Fn::ImportValue": "KMSKeyID"
+        },
+        "VolumeType": "gp2",
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Ref": "NameTag"
+            }
+          },
+          {
+            "Key": "CostCentre",
+            "Value": {
+              "Ref": "CostCentreTag"
+            }
+          }
+        ],
+        "AvailabilityZone": {
+          "Fn::GetAtt": [
+            "Instance",
+            "AvailabilityZone"
+          ]
+        }
+      }
+    },
+    "MountPoint5": {
+      "Condition": "CreateDataVolume5",
+      "Type": "AWS::EC2::VolumeAttachment",
+      "DeletionPolicy": "Retain",
+      "Properties": {
+        "InstanceId": {
+          "Ref": "Instance"
+        },
+        "VolumeId": {
+          "Ref": "DataVolume5Provision"
+        },
+        "Device": "/dev/sdj"
+      }
+    },
+    "DataVolume5Provision": {
+      "Condition": "CreateDataVolume5",
+      "Type": "AWS::EC2::Volume",
+      "DeletionPolicy": "Retain",
+      "Properties": {
+        "Size": {
+          "Ref": "DataVolume5"
+        },
+        "Encrypted": "true",
+        "KmsKeyId": {
+          "Fn::ImportValue": "KMSKeyID"
+        },
+        "VolumeType": "gp2",
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Ref": "NameTag"
+            }
+          },
+          {
+            "Key": "CostCentre",
+            "Value": {
+              "Ref": "CostCentreTag"
+            }
+          }
+        ],
+        "AvailabilityZone": {
+          "Fn::GetAtt": [
+            "Instance",
+            "AvailabilityZone"
+          ]
+        }
+      }
+    },
+    "MountPoint6": {
+      "Condition": "CreateDataVolume6",
+      "Type": "AWS::EC2::VolumeAttachment",
+      "DeletionPolicy": "Retain",
+      "Properties": {
+        "InstanceId": {
+          "Ref": "Instance"
+        },
+        "VolumeId": {
+          "Ref": "DataVolume6Provision"
+        },
+        "Device": "/dev/sdk"
+      }
+    },
+    "DataVolume6Provision": {
+      "Condition": "CreateDataVolume6",
+      "Type": "AWS::EC2::Volume",
+      "DeletionPolicy": "Retain",
+      "Properties": {
+        "Size": {
+          "Ref": "DataVolume6"
+        },
+        "Encrypted": "true",
+        "KmsKeyId": {
+          "Fn::ImportValue": "KMSKeyID"
+        },
+        "VolumeType": "gp2",
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Ref": "NameTag"
+            }
+          },
+          {
+            "Key": "CostCentre",
+            "Value": {
+              "Ref": "CostCentreTag"
+            }
+          }
+        ],
+        "AvailabilityZone": {
+          "Fn::GetAtt": [
+            "Instance",
+            "AvailabilityZone"
+          ]
+        }
+      }
+    },
+    "RootVolTagFunction": {
+      "Type": "AWS::Lambda::Function",
+      "DependsOn": "Instance",
+      "Properties": {
+        "Code": {
+          "ZipFile": {
+            "Fn::Join": [
+              "",
+              [
+                "console.log('Loading function');",
+                "var AWS = require('aws-sdk');",
+                "var ec2 = new AWS.EC2();",
+                "AWS.config.region = 'ap-southeast-2';",
+                "exports.handler = function (event, context) {",
+                "console.log('Received event:', JSON.stringify(event, null, 2));",
+                "var getvolid = {",
+                "Attribute: \"blockDeviceMapping\",",
+                "InstanceId: (event.ResourceProperties.Instance)",
+                "};",
+                "ec2.describeInstanceAttribute(getvolid, function (err, getvoliddata) {",
+                "if (err) {",
+                "console.log(err, err.stack);",
+                "sendResponse(event, context, \"FAILED\", {});",
+                "}",
+                "else console.log ('getvoliddataoutput', (getvoliddata.BlockDeviceMappings[0].Ebs.VolumeId));",
+                "var tagvol = {",
+                "Resources: [(getvoliddata.BlockDeviceMappings[0].Ebs.VolumeId)],",
+                "Tags: [",
+                "{",
+                "Key: \"Name\",",
+                "Value: (event.ResourceProperties.NameTag)",
+                "},",
+                "{",
+                "Key: \"CostCentre\",",
+                "Value: (event.ResourceProperties.CostCentreTag)",
+                "}",
+                "]",
+                "};",
+                "ec2.createTags(tagvol, function (err, data) {",
+                "if (err) {",
+                "console.log(err, err.stack);",
+                "sendResponse(event, context, \"FAILED\", {});",
+                "}",
+                "else {",
+                "console.log('\\n Created Tags on Volume', (getvoliddata.BlockDeviceMappings[0].Ebs.VolumeId), 'for Instance', (event.ResourceProperties.Instance), '\\n Key: Name \\n Value:',(event.ResourceProperties.NameTag),'\\n Key: CostCentre \\n Value:',(event.ResourceProperties.CostCentreTag));",
+                "sendResponse(event, context, \"SUCCESS\", {});",
+                "}",
+                "});",
+                "});",
+                "};",
+                "function sendResponse(event, context, responseStatus, responseData) {",
+                "var responseBody = JSON.stringify({",
+                "Status: responseStatus,",
+                "Reason: \"See the details in CloudWatch Log Stream: \" + context.logStreamName,",
+                "PhysicalResourceId: context.logStreamName,",
+                "StackId: event.StackId,",
+                "RequestId: event.RequestId,",
+                "LogicalResourceId: event.LogicalResourceId,",
+                "Data: responseData",
+                "});",
+                "console.log(\"RESPONSE BODY:\\n\", responseBody);",
+                "var https = require(\"https\");",
+                "var url = require(\"url\");",
+                "var parsedUrl = url.parse(event.ResponseURL);",
+                "var options = {",
+                "hostname: parsedUrl.hostname,",
+                "port: 443,",
+                "path: parsedUrl.path,",
+                "method: \"PUT\",",
+                "headers: {",
+                "\"content-type\": \"\",",
+                "\"content-length\": responseBody.length",
+                "}",
+                "};",
+                "console.log(\"SENDING RESPONSE...\\n\");",
+                "var request = https.request(options, function(response) {",
+                "console.log(\"STATUS: \" + response.statusCode);",
+                "console.log(\"HEADERS: \" + JSON.stringify(response.headers));",
+                "context.done();",
+                "});",
+                "request.on(\"error\", function(error) {",
+                "console.log(\"sendResponse Error:\" + error);",
+                "context.done();",
+                "});",
+                "request.write(responseBody);",
+                "request.end();",
+                "}"
+              ]
+            ]
+          }
+        },
+        "Description": "Adds Tags to root volume",
+        "FunctionName": "RootVolTagFunction",
+        "Handler": "index.handler",
+        "MemorySize": "256",
+        "Role": {
+          "Fn::GetAtt": [
+            "LambdaTagRole",
+            "Arn"
+          ]
+        },
+        "Runtime": "nodejs6.10",
+        "Timeout": "30"
+      }
+    },
+    "LambdaTagRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": "LambdaTagRole",
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [
+                  "lambda.amazonaws.com"
+                ]
+              },
+              "Action": [
+                "sts:AssumeRole"
+              ]
+            }
+          ]
+        },
+        "Path": "/",
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+        ],
+        "Policies": [
+          {
+            "PolicyName": "LambdaTagPolicy",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "ec2:describe*",
+                    "ec2:createtags"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "LambdaTagExecute": {
+      "Type": "Custom::LambdaTagExecute",
+      "DependsOn": "Instance",
+      "Properties": {
+        "ServiceToken": {
+          "Fn::GetAtt": [
+            "RootVolTagFunction",
+            "Arn"
+          ]
+        },
+        "Region": {
+          "Ref": "AWS::Region"
+        },
+        "NameTag": {
+          "Ref": "NameTag"
+        },
+        "CostCentreTag": {
+          "Ref": "CostCentreTag"
+        },
+        "Instance": {
+          "Ref": "Instance"
+        }
+      }
+    }
+  }
+}
+
+
+

@@ -1,0 +1,309 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Create CostCentre tags from parental or onwer resource",
+    "Parameters": {
+        "roleName": {
+            "Type": "String",
+            "Default": "DatacomIntegration"
+        },
+        "externalId": {
+            "Type": "String",
+            "Default": "Datacom"
+        },
+        "serviceAccountIds": {
+            "Description": "AWS service account Ids seperated by comma",
+            "Type": "String",
+            "Default": ""
+        },
+        "resourceTypes": {
+            "Description": "Untagged resource types to be updated, volume and/or snapshot, seperated by comma",
+            "Type": "String",
+            "Default": "volume,snapshot"
+        }
+    },
+    "Resources": {
+        "DewfordCreateTags": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Code": {
+                    "ZipFile": "\"use strict\";var AWS=require(\"aws-sdk\"),sts=new AWS.STS,describeTags=function(e,n){return new Promise(function(t,r){e.describeTags({Filters:[{Name:\"resource-id\",Values:[n]}]},function(e,n){e?r(e):t(n.Tags)})})},getCostCentreTag=function(e){var n=!0,t=!1,r=void 0;try{for(var a,s=e[Symbol.iterator]();!(n=(a=s.next()).done);n=!0){var o=a.value;if(\"CostCentre\"===o.Key)return o.Value}}catch(e){t=!0,r=e}finally{try{!n&&s.return&&s.return()}finally{if(t)throw r}}},createTags=function(e,n,t){return new Promise(function(r,a){e.createTags({Resources:[t],Tags:[{Key:\"CostCentre\",Value:n}]},function(e,n){e?a(e):r(n)})})},tagResource=function(e,n,t){return new Promise(function(r){describeTags(e,n).then(function(a){getCostCentreTag(a)?r():describeTags(e,t).then(function(t){var a=getCostCentreTag(t);a&&createTags(e,a,n).then(function(){r()})})})})},describeImages=function(e,n){return new Promise(function(t,r){e.describeImages({ImageIds:[n]},function(e,n){e?r(e):t(n)})})},describeInstances=function(e,n){return new Promise(function(t,r){e.describeInstances({InstanceIds:n},function(e,n){e?r(e):t(n)})})},createTagsInServiceAccount=function(e,n,t,r){return new Promise(function(t,r){var a=n.detail.responseElements,s=n.detail.requestParameters;switch(n.detail.eventName){case\"StartInstances\":case\"RunInstances\":var o=[],c=!0,i=!1,u=void 0;try{for(var l,f=a.instancesSet.items[Symbol.iterator]();!(c=(l=f.next()).done);c=!0){var d=l.value;o.push(d.instanceId)}}catch(e){i=!0,u=e}finally{try{!c&&f.return&&f.return()}finally{if(i)throw u}}describeInstances(e,o).then(function(n){var r=[],a=!0,s=!1,o=void 0;try{for(var c,i=n.Reservations[Symbol.iterator]();!(a=(c=i.next()).done);a=!0){var u=c.value,l=!0,f=!1,d=void 0;try{for(var m,v=u.Instances[Symbol.iterator]();!(l=(m=v.next()).done);l=!0){var I=m.value,g=!0,h=!1,y=void 0;try{for(var b,p=I.BlockDeviceMappings[Symbol.iterator]();!(g=(b=p.next()).done);g=!0){var S=b.value;S.Ebs&&S.Ebs.VolumeId&&r.push(tagResource(e,S.Ebs.VolumeId,I.InstanceId))}}catch(e){h=!0,y=e}finally{try{!g&&p.return&&p.return()}finally{if(h)throw y}}}}catch(e){f=!0,d=e}finally{try{!l&&v.return&&v.return()}finally{if(f)throw d}}}}catch(e){s=!0,o=e}finally{try{!a&&i.return&&i.return()}finally{if(s)throw o}}Promise.all(r).then(function(){t()})});break;case\"CreateSnapshot\":tagResource(e,a.snapshotId,s.volumeId).then(function(){t()});break;case\"CopySnapshot\":tagResource(e,a.snapshotId,s.sourceSnapshotId).then(function(){t()});break;case\"CreateImage\":case\"CopyImage\":var m=\"CreateImage\"===n.detail.eventName?s.instanceId:s.sourceImageId;tagResource(e,a.imageId,m).then(function(){describeImages(e,a.imageId).then(function(n){var r=[];if(n.Images.length>0){var s=!0,o=!1,c=void 0;try{for(var i,u=n.Images[0].BlockDeviceMappings[Symbol.iterator]();!(s=(i=u.next()).done);s=!0){var l=i.value;l.Ebs&&l.Ebs.SnapshotId&&r.push(tagResource(e,l.Ebs.SnapshotId,a.imageId))}}catch(e){o=!0,c=e}finally{try{!s&&u.return&&u.return()}finally{if(o)throw c}}}Promise.all(r).then(function(){t()})})});break;case\"CreateVolume\":tagResource(e,a.volumeId,s.snapshotId).then(function(){t()});break;case\"AttachVolume\":tagResource(e,a.volumeId,s.instanceId).then(function(){t()});break;default:r(\"Unsupported CloudTrail Event\")}})},rName=process.env.roleName,eId=process.env.externalId;exports.handler=function(e,n,t){console.log(JSON.stringify(e)),sts.assumeRole({ExternalId:eId,RoleArn:\"arn:aws:iam::\"+e.account+\":role/\"+rName,RoleSessionName:e.account+\"-createTags\"}).promise().then(function(r){var a=r.Credentials,s=new AWS.EC2({accessKeyId:a.AccessKeyId,secretAccessKey:a.SecretAccessKey,sessionToken:a.SessionToken});return createTagsInServiceAccount(s,e,n,t)}).then(function(){t(null)}).catch(function(e){t(e)})};"
+                },
+                "Description": "create-tags",
+                "FunctionName": "create-tags",
+                "Handler": "index.handler",
+                "MemorySize": "128",
+                "Timeout": "15",
+                "Runtime": "nodejs6.10",
+                "Role": {
+                    "Fn::GetAtt": [
+                        "CreateTagsRole",
+                        "Arn"
+                    ]
+                },
+                "Environment": {
+                    "Variables": {
+                        "roleName": {
+                            "Ref": "roleName"
+                        },
+                        "externalId": {
+                            "Ref": "externalId"
+                        }
+                    }
+                }
+            }
+        },
+        "CreateTagsRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": "lambda.amazonaws.com"
+                            },
+                            "Action": "sts:AssumeRole"
+                        }
+                    ]
+                },
+                "ManagedPolicyArns": [
+                    "arn:aws:iam::aws:policy/AdministratorAccess"
+                ],
+                "RoleName": "create-tags"
+            }
+        },
+        "CreateTagsPermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "DewfordCreateTags"
+                },
+                "SourceArn": {
+                    "Fn::GetAtt": [
+                        "CreateTagsRule",
+                        "Arn"
+                    ]
+                },
+                "Principal": "events.amazonaws.com"
+            }
+        },
+        "CreateTagsRule": {
+            "Type": "AWS::Events::Rule",
+            "Properties": {
+                "EventPattern": {
+                    "detail-type": [
+                        "AWS API Call via CloudTrail"
+                    ],
+                    "detail": {
+                        "eventSource": [
+                            "ec2.amazonaws.com"
+                        ],
+                        "eventName": [
+                            "StartInstances",
+                            "RunInstances",
+                            "CreateImage",
+                            "CopyImage",
+                            "CreateSnapshot",
+                            "CopySnapshot",
+                            "CreateVolume",
+                            "AttachVolume"
+                        ]
+                    }
+                },
+                "Name": "create-tags",
+                "Targets": [
+                    {
+                        "Arn": {
+                            "Fn::GetAtt": [
+                                "DewfordCreateTags",
+                                "Arn"
+                            ]
+                        },
+                        "Id": "create-tags"
+                    }
+                ]
+            }
+        },
+        "ScheduledRule": {
+            "Type": "AWS::Events::Rule",
+            "Properties": {
+                "Description": "CreateTagsScheduledRule",
+                "ScheduleExpression": "rate(1 hour)",
+                "State": "ENABLED",
+                "Targets": [
+                    {
+                        "Arn": {
+                            "Fn::GetAtt": [
+                                "DewfordCreateTagsScheduler",
+                                "Arn"
+                            ]
+                        },
+                        "Id": "create-tag-scheduler"
+                    }
+                ]
+            }
+        },
+        "DewfordCreateTagsScheduler": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Code": {
+                    "ZipFile": "const AWS = require('aws-sdk');\r\n\r\nconst iamRoleName = process.env.roleName;\r\nconst externalId = process.env.externalId;\r\nconst serviceAccountIds = process.env.serviceAccountIds;\r\nconst resourceTypes = process.env.resourceTypes;\r\nconst stateMachine = process.env.stateMachine;\r\n\r\nconst updateUntaggedResources = (stepfunctions, event) => new Promise((resolve, reject) => {\r\n\r\n    let param = JSON.parse(JSON.stringify(event));\r\n\r\n    stepfunctions.startExecution({\r\n        stateMachineArn: stateMachine,\r\n        input: JSON.stringify(param),\r\n    }).promise().then((data) => {\r\n        console.log(\"Return data: \" + JSON.stringify(data));\r\n    }).catch((err) => {\r\n        console.log(err);\r\n    });\r\n});\r\n\r\n// Describe resource tags of EC2 Images, Volumes and Snapshots in service accounts\r\nconst updateUntaggedResourcesInServiceAccount = (accountId) => new Promise((resolve, reject) => {\r\n    const sts = new AWS.STS();\r\n    const stepfunctions = new AWS.StepFunctions();\r\n    //let promises = [];\r\n\r\n    sts.assumeRole({\r\n        DurationSeconds: 3600,\r\n        ExternalId: externalId,\r\n        RoleArn: `arn:aws:iam::${accountId}:role/${iamRoleName}`,\r\n        RoleSessionName: `${accountId}-createTagsScheduler`\r\n    }).promise().then((data) => {\r\n        let param = {\r\n            global: {\r\n                accountId: accountId,\r\n                credentials: data.Credentials\r\n            }\r\n        }\r\n\r\n        resourceTypes.replace(/\\s/g, '').split(',').forEach((resourceType) => {\r\n            param.global.resourceType = resourceType;\r\n            updateUntaggedResources(stepfunctions, param);\r\n        });\r\n    });;\r\n});\r\n\r\nexports.handler = (event, context, callback) => {\r\n    let promises = [];\r\n\r\n    serviceAccountIds.replace(/\\s/g, '').split(',').forEach((accountId) => {\r\n        console.log(`Checking AWS account ${accountId} ...`);\r\n        promises.push(updateUntaggedResourcesInServiceAccount(accountId));\r\n    });\r\n\r\n    Promise.all(promises).then((data) => {\r\n        callback();\r\n    }).catch((err) => {\r\n        callback(err);\r\n    });\r\n};"
+                },
+                "FunctionName": {
+                    "Fn::Join": [
+                        "-",
+                        [
+                            {
+                                "Ref": "AWS::StackName"
+                            },
+                            "CreateTagsScheduler"
+                        ]
+                    ]
+                },
+                "Handler": "index.handler",
+                "MemorySize": "128",
+                "Role": {
+                    "Fn::GetAtt": [
+                        "CreateTagsRole",
+                        "Arn"
+                    ]
+                },
+                "Runtime": "nodejs6.10",
+                "Environment": {
+                    "Variables": {
+                        "serviceAccountIds": {
+                            "Ref": "serviceAccountIds"
+                        },
+                        "roleName": {
+                            "Ref": "roleName"
+                        },
+                        "externalId": {
+                            "Ref": "externalId"
+                        },
+                        "resourceTypes": {
+                            "Ref": "resourceTypes"
+                        },
+                        "stateMachine": {
+                            "Ref": "StateMachine"
+                        }
+                    }
+                },
+                "Timeout": "300"
+            }
+        },
+        "StateMachine": {
+            "Type": "AWS::StepFunctions::StateMachine",
+            "Properties": {
+                "DefinitionString": {
+                    "Fn::Sub": "{\r\n    \"Comment\": \"\",\r\n    \"StartAt\": \"DescribeUntaggedResources\",\r\n    \"States\": {\r\n        \"DescribeUntaggedResources\": {\r\n            \"Type\": \"Task\",\r\n            \"Resource\": \"${DewfordDescribeUntaggedResources.Arn}\",\r\n            \"ResultPath\": \"$.global.unTaggedResouces\",\r\n            \"Next\": \"UpdateUntaggedResources\"\r\n        },\r\n        \"UpdateUntaggedResources\": {\r\n            \"Type\": \"Task\",\r\n            \"Resource\": \"${DewfordUpdateUntaggedResources.Arn}\",\r\n            \"End\": true\r\n        }\r\n    }\r\n}"
+                },
+                "RoleArn": {
+                    "Fn::GetAtt": [
+                        "StateMachineRole",
+                        "Arn"
+                    ]
+                }
+            }
+        },
+        "StateMachineRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": {
+                                    "Fn::Sub": "states.${AWS::Region}.amazonaws.com"
+                                }
+                            },
+                            "Action": "sts:AssumeRole"
+                        }
+                    ]
+                },
+                "Policies": [
+                    {
+                        "PolicyName": {
+                            "Fn::Sub": "${AWS::StackName}"
+                        },
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "lambda:InvokeFunction"
+                                    ],
+                                    "Resource": "*"
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "DewfordDescribeUntaggedResources": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Code": {
+                    "ZipFile": "const AWS = require('aws-sdk');\r\n\r\nconst region = process.env.region;\r\n\r\nconst isUntaggedResource  = function (resource) {\r\n    for (let tag of resource.Tags) {\r\n        if (tag.Key === 'CostCentre') {\r\n            return (! tag.Value);\r\n        }\r\n    }\r\n    return true;\r\n};\r\n\r\nconst describeUntaggedResources = function (ec2, resourceType, datas, accountId, nextToken) {\r\n\r\n    return new Promise((resolve, reject) => {\r\n        const params = {\r\n        };\r\n\r\n        if (nextToken) {\r\n            params.NextToken = nextToken;\r\n        };\r\n\r\n        let untaggedResources = [];\r\n\r\n        switch (resourceType) {\r\n            case 'volume':\r\n                ec2.describeVolumes(params).promise()\r\n                    .then((data) => {\r\n                        if (data.NextToken) {\r\n                            resolve(describeUntaggedResources(ec2, resourceType, datas.concat(data.Volumes), accountId, data.NextToken));\r\n                        } else {\r\n                            datas.concat(data.Volumes).forEach((volume) => {\r\n                                if (isUntaggedResource(volume)) {\r\n                                    untaggedResources.push(volume);\r\n                                }\r\n                            });\r\n                            resolve(untaggedResources);\r\n                        }\r\n                    })\r\n                    .catch((e) => {\r\n                        if (e === 'RateLimitExceeded') {\r\n                            resolve(setTimeout(() => {\r\n                                describeUntaggedResources(ec2, resourceType, datas, accountId, nextToken)\r\n                            }, 1000))\r\n                        } else {\r\n                            reject(e);\r\n                        }\r\n                    });\r\n                break;\r\n            case 'snapshot':\r\n                params.OwnerIds = [accountId];\r\n                ec2.describeSnapshots(params).promise()\r\n                    .then((data) => {\r\n                        if (data.NextToken) {\r\n                            resolve(describeUntaggedResources(ec2, resourceType, datas.concat(data.Snapshots), accountId, data.NextToken));\r\n                        } else {\r\n                            datas.concat(data.Snapshots).forEach((snapshot) => {\r\n                                if (isUntaggedResource(snapshot)) {\r\n                                    untaggedResources.push(snapshot);\r\n                                }\r\n                            });\r\n                            resolve(untaggedResources);\r\n                        }\r\n                    })\r\n                    .catch((e) => {\r\n                        if (e === 'RateLimitExceeded') {\r\n                            resolve(setTimeout(() => {\r\n                                describeUntaggedResources(ec2, resourceType, datas, accountId, nextToken)\r\n                            }, 1000))\r\n                        } else {\r\n                            reject(e);\r\n                        }\r\n                    });\r\n                break;\r\n            default:\r\n                reject('Unsupported resource type');\r\n        };\r\n    })\r\n}\r\n\r\nexports.handler = (event, context, callback) => {\r\n    const ec2 = new AWS.EC2(event.global.credentials ? event.global.credentials : {});\r\n    const resourceType = event.global.resourceType;\r\n    const accountId = event.global.accountId;\r\n\r\n    let untaggedResources = [];\r\n\r\n    describeUntaggedResources(ec2, resourceType, [], accountId).then((data) => {\r\n        callback(null, data);\r\n    }).catch((err) => {\r\n        callback(err);\r\n    });\r\n}"
+                },
+                "Description": "describe-untagged-resources",
+                "FunctionName": "describe-untagged-resources",
+                "Handler": "index.handler",
+                "MemorySize": "128",
+                "Timeout": "15",
+                "Runtime": "nodejs6.10",
+                "Role": {
+                    "Fn::GetAtt": [
+                        "CreateTagsRole",
+                        "Arn"
+                    ]
+                },
+                "Environment": {
+                    "Variables": {
+                        "roleName": {
+                            "Ref": "roleName"
+                        },
+                        "externalId": {
+                            "Ref": "externalId"
+                        }
+                    }
+                }
+            }
+        },
+        "DewfordUpdateUntaggedResources": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Code": {
+                    "ZipFile": "const AWS = require('aws-sdk'); // eslint-disable-line import/no-extraneous-dependencies\r\n\r\nconst lambda = new AWS.Lambda();\r\n\r\nconst updateResourceCostCentre = (resourceType, resource, accountId) => {\r\n    return new Promise(\r\n        function (resolve, reject) {\r\n            let params = {\r\n                ClientContext: \"createTagsSheduler\",\r\n                FunctionName: \"create-tags\",\r\n                InvocationType: \"Event\",\r\n            };\r\n            let payload = {\r\n                account: accountId,\r\n                detail: {\r\n                    responseElements: {},\r\n                    requestParameters: {}\r\n                }\r\n            };\r\n\r\n            let detail = payload.detail;\r\n            let responses = payload.detail.responseElements;\r\n            let requestParameters = payload.detail.requestParameters;\r\n\r\n            switch (resourceType) {\r\n                case 'snapshot':\r\n                    detail.eventName = 'CreateSnapshot';\r\n                    responses.snapshotId = resource.SnapshotId;\r\n                    requestParameters.volumeId = resource.VolumeId;\r\n                    console.log(`snapshotId: ${resource.SnapshotId} VolumeId: ${resource.VolumeId}`);\r\n                    break;\r\n                case 'volume':\r\n                    responses.volumeId = resource.VolumeId;\r\n                    if (resource.Attachments.length) {\r\n                        detail.eventName = 'AttachVolume';\r\n                        requestParameters.instanceId = resource.Attachments[0].InstanceId\r\n                    } else if (resource.SnapshotId) {\r\n                        detail.eventName = 'CreateVolume';\r\n                        requestParameters.snapshotId = resource.SnapshotId\r\n                    };\r\n                    break;\r\n                case 'image':\r\n                    console.log(`imageId: ${resource.ImageId} SnapshotId: ${resource.BlockDeviceMappings[0].Ebs.SnapshotId}`);\r\n                    reject(`Unsupported resource type ${resourceType}`);\r\n                    break;\r\n                default:\r\n                    reject(`Unsupported resource type ${resourceType}`);\r\n            }\r\n\r\n            params.Payload = JSON.stringify(payload);\r\n\r\n            lambda.invoke(params).promise()\r\n                .then((data) => {\r\n                    console.log(JSON.stringify(data));\r\n                    resolve(data);\r\n                });\r\n        }\r\n    );\r\n}\r\n\r\nexports.handler = (event, context, callback) => {\r\n\r\n    const resourceType = event.global.resourceType;\r\n    const accountId = event.global.accountId;\r\n    const unTaggedResources = event.global.unTaggedResouces;\r\n\r\n    let promises = [];\r\n\r\n    console.log('-------- Function UpdateUntaggedResources --------------');\r\n    console.log(JSON.stringify(event));\r\n\r\n    unTaggedResources.forEach(resource => {\r\n        promises.push(updateResourceCostCentre(resourceType, resource, accountId));\r\n    });\r\n\r\n    Promise.all(promises).then((data) => {\r\n        callback();\r\n    }).catch((err) => {\r\n        callback(err);\r\n    });\r\n};\r\n"
+                },
+                "Description": "update-untagged-resources",
+                "FunctionName": "update-untagged-resources",
+                "Handler": "index.handler",
+                "MemorySize": "128",
+                "Timeout": "15",
+                "Runtime": "nodejs6.10",
+                "Role": {
+                    "Fn::GetAtt": [
+                        "CreateTagsRole",
+                        "Arn"
+                    ]
+                },
+                "Environment": {
+                    "Variables": {
+                        "roleName": {
+                            "Ref": "roleName"
+                        },
+                        "externalId": {
+                            "Ref": "externalId"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

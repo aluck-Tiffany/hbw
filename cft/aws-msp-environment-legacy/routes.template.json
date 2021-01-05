@@ -1,0 +1,461 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Routes",
+  "Parameters": {
+    "Name": {
+      "Type": "String",
+      "Default": "Customer Environment",
+      "Description": "Specify the customer name, environment & VPC ID (If multiple VPC's), e.g. Datacom Production"
+    },
+    "VPCIdentifier": {
+      "Type": "String",
+      "Description": "Specify the VPC Identifier - This is only to be used if more than one VPC is being deployed into the account"
+    }
+  },
+  "Resources": {
+    "ControlledARouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "VpcId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "VPC${VPCIdentifier}"
+          }
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                " ",
+                [
+                  {
+                    "Ref": "Name"
+                  },
+                  "Controlled A Route Table"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "ControlledBRouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "VpcId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "VPC${VPCIdentifier}"
+          }
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                " ",
+                [
+                  {
+                    "Ref": "Name"
+                  },
+                  "Controlled B Route Table"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "ControlledCRouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "VpcId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "VPC${VPCIdentifier}"
+          }
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                " ",
+                [
+                  {
+                    "Ref": "Name"
+                  },
+                  "Controlled C Route Table"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "ControlledASubnetRouteTableAssociation": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "ControlledASubnet${VPCIdentifier}"
+          }
+        },
+        "RouteTableId": {
+          "Ref": "ControlledARouteTable"
+        }
+      }
+    },
+    "ControlledBSubnetRouteTableAssociation": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "ControlledBSubnet${VPCIdentifier}"
+          }
+        },
+        "RouteTableId": {
+          "Ref": "ControlledBRouteTable"
+        }
+      }
+    },
+    "ControlledCSubnetRouteTableAssociation": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "ControlledCSubnet${VPCIdentifier}"
+          }
+        },
+        "RouteTableId": {
+          "Ref": "ControlledCRouteTable"
+        }
+      }
+    },
+    "RestrictedARouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "VpcId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "VPC${VPCIdentifier}"
+          }
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                " ",
+                [
+                  {
+                    "Ref": "Name"
+                  },
+                  "Restricted A Route Table"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "RestrictedBRouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "VpcId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "VPC${VPCIdentifier}"
+          }
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                " ",
+                [
+                  {
+                    "Ref": "Name"
+                  },
+                  "Restricted B Route Table"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "RestrictedCRouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "VpcId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "VPC${VPCIdentifier}"
+          }
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                " ",
+                [
+                  {
+                    "Ref": "Name"
+                  },
+                  "Restricted C Route Table"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "RestrictedASubnetRouteTableAssociation": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "RestrictedASubnet${VPCIdentifier}"
+          }
+        },
+        "RouteTableId": {
+          "Ref": "RestrictedARouteTable"
+        }
+      }
+    },
+    "RestrictedBSubnetRouteTableAssociation": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "RestrictedBSubnet${VPCIdentifier}"
+          }
+        },
+        "RouteTableId": {
+          "Ref": "RestrictedBRouteTable"
+        }
+      }
+    },
+    "RestrictedCSubnetRouteTableAssociation": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "RestrictedCSubnet${VPCIdentifier}"
+          }
+        },
+        "RouteTableId": {
+          "Ref": "RestrictedCRouteTable"
+        }
+      }
+    },
+    "SecuredARouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "VpcId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "VPC${VPCIdentifier}"
+          }
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                " ",
+                [
+                  {
+                    "Ref": "Name"
+                  },
+                  "Secured A Route Table"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "SecuredBRouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "VpcId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "VPC${VPCIdentifier}"
+          }
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                " ",
+                [
+                  {
+                    "Ref": "Name"
+                  },
+                  "Secured B Route Table"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "SecuredASubnetRouteTableAssociation": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "SecuredASubnet${VPCIdentifier}"
+          }
+        },
+        "RouteTableId": {
+          "Ref": "SecuredARouteTable"
+        }
+      }
+    },
+    "SecuredBSubnetRouteTableAssociation": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "SecuredBSubnet${VPCIdentifier}"
+          }
+        },
+        "RouteTableId": {
+          "Ref": "SecuredBRouteTable"
+        }
+      }
+    },
+    "ControlledAInternetRoute": {
+      "Type": "AWS::EC2::Route",
+      "Properties": {
+        "RouteTableId": {
+          "Ref": "ControlledARouteTable"
+        },
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "GatewayId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "InternetGateway${VPCIdentifier}"
+          }
+        }
+      }
+    },
+    "ControlledBInternetRoute": {
+      "Type": "AWS::EC2::Route",
+      "Properties": {
+        "RouteTableId": {
+          "Ref": "ControlledBRouteTable"
+        },
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "GatewayId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "InternetGateway${VPCIdentifier}"
+          }
+        }
+      }
+    },
+    "ControlledCInternetRoute": {
+      "Type": "AWS::EC2::Route",
+      "Properties": {
+        "RouteTableId": {
+          "Ref": "ControlledCRouteTable"
+        },
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "GatewayId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "InternetGateway${VPCIdentifier}"
+          }
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "ControlledARouteTable": {
+      "Description": "ControlledARouteTable Logical ID",
+      "Value": {
+        "Ref": "ControlledARouteTable"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "ControlledARouteTable${VPCIdentifier}"
+        }
+      }
+    },
+    "ControlledBRouteTable": {
+      "Description": "ControlledBRouteTable Logical ID",
+      "Value": {
+        "Ref": "ControlledBRouteTable"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "ControlledBRouteTable${VPCIdentifier}"
+        }
+      }
+    },
+    "ControlledCRouteTable": {
+      "Description": "ControlledCRouteTable Logical ID",
+      "Value": {
+        "Ref": "ControlledCRouteTable"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "ControlledCRouteTable${VPCIdentifier}"
+        }
+      }
+    },
+    "RestrictedARouteTable": {
+      "Description": "RestrictedARouteTable Logical ID",
+      "Value": {
+        "Ref": "RestrictedARouteTable"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "RestrictedARouteTable${VPCIdentifier}"
+        }
+      }
+    },
+    "RestrictedBRouteTable": {
+      "Description": "RestrictedBRouteTable Logical ID",
+      "Value": {
+        "Ref": "RestrictedBRouteTable"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "RestrictedBRouteTable${VPCIdentifier}"
+        }
+      }
+    },
+    "RestrictedCRouteTable": {
+      "Description": "RestrictedCRouteTable Logical ID",
+      "Value": {
+        "Ref": "RestrictedCRouteTable"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "RestrictedCRouteTable${VPCIdentifier}"
+        }
+      }
+    },
+    "SecuredARouteTable": {
+      "Description": "SecuredARouteTable Logical ID",
+      "Value": {
+        "Ref": "SecuredARouteTable"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "SecuredARouteTable${VPCIdentifier}"
+        }
+      }
+    },
+    "SecuredBRouteTable": {
+      "Description": "SecuredBRouteTable Logical ID",
+      "Value": {
+        "Ref": "SecuredBRouteTable"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "SecuredBRouteTable${VPCIdentifier}"
+        }
+      }
+    }
+  }
+}

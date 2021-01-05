@@ -1,0 +1,82 @@
+{
+    "Comment": "Setup Account Machine",
+    "StartAt": "AddCloudCheckrAccount",
+    "States": {
+        "AddCloudCheckrAccount": {
+            "Type": "Task",
+            "Resource": "${CloudCheckrAddAccount}",
+            "Next": "UpdatePolicy",
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "Fail"
+                }
+            ],
+            "ResultPath": "$.cloudcheckr"
+        },
+        "UpdatePolicy": {
+            "Type": "Task",
+            "Resource": "${UpdatePolicy}",
+            "Next": "cloudCheckrAccountId",
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "Fail"
+                }
+            ]
+        },
+        "cloudCheckrAccountId": {
+            "Type": "Pass",
+            "InputPath": "$.cloudcheckr.role_account_id",
+            "ResultPath": "$.cloudCheckrAccountId",
+            "Next": "cloudCheckrExternalId"
+        },
+        "cloudCheckrExternalId": {
+            "Type": "Pass",
+            "InputPath": "$.cloudcheckr.cc_external_id",
+            "ResultPath": "$.cloudCheckrExternalId",
+            "Next": "SetupAccount"
+        },
+        "SetupAccount": {
+            "Type": "Task",
+            "Resource": "${SetupAccount}",
+            "Next": "WaitForAccountBuild",
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "Fail"
+                }
+            ]
+        },
+        "WaitForAccountBuild": {
+            "Type": "Wait",
+            "Seconds": 1800,
+            "Next": "EditCloudCheckrCredentials"
+        },
+        "EditCloudCheckrCredentials": {
+            "Type": "Task",
+            "Resource": "${CloudCheckrEditCredentials}",
+            "Next": "Succeed",
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "Fail"
+                }
+            ]
+        },
+        "Succeed": {
+            "Type": "Succeed"
+        },
+        "Fail": {
+            "Type": "Fail"
+        }
+    }
+}

@@ -1,0 +1,28 @@
+{
+  "description": "Bootstrap API",
+  "version": "1.0.0",
+  "license": "UNLICENSED",
+  "main": "index.js",
+  "private": true,
+  "devDependencies": {
+    "aws-sdk": "^2.130.0",
+    "babel-minify": "^0.4.0",
+    "eslint": "^3.19.0",
+    "eslint-config-airbnb-base": "^11.2.0",
+    "eslint-plugin-import": "^2.2.0",
+    "jest": "^22.4.3"
+  },
+  "scripts": {
+    "test": "jest",
+    "lint": "node_modules/eslint/bin/eslint.js index.js",
+    "package": "rm -rf dist/ && node_modules/babel-minify/bin/minify.js index.js -d dist && cp package.json dist && cd dist/ && npm install --production && zip -r function.zip *"
+  },
+  "jest": {
+    "testEnvironment": "node"
+  },
+  "repository": {
+    "type": "git",
+    "url": "ssh://datacomcloudplatforms@vs-ssh.visualstudio.com:22/aws-enabling-services/_ssh/"
+  },
+  "author": "christopher.coombs@datacom.com.au"
+}

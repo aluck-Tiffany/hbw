@@ -1,0 +1,137 @@
+{  
+   "AWSTemplateFormatVersion":"2010-09-09",
+   "Description":"CreateCPMtag",
+   "Resources":{  
+      "LambdaRole":{  
+         "Type":"AWS::IAM::Role",
+         "Properties":{  
+            "AssumeRolePolicyDocument":{  
+               "Version":"2012-10-17",
+               "Statement":[  
+                  {  
+                     "Effect":"Allow",
+                     "Principal":{  
+                        "Service":[  
+                           "lambda.amazonaws.com"
+                        ]
+                     },
+                     "Action":[  
+                        "sts:AssumeRole"
+                     ]
+                  }
+               ]
+            },
+            "Policies":[  
+               {  
+                  "PolicyName":"Ec2-list-role",
+                  "PolicyDocument":{  
+                     "Version":"2012-10-17",
+                     "Statement":[  
+                        {  
+                           "Effect":"Allow",
+                           "Action":[  
+                              "ec2:DescribeInstances",
+                              "ec2:CreateTags",
+                              "logs:CreateLogGroup",
+                              "logs:CreateLogStream",
+                              "logs:PutLogEvents"
+                           ],
+                           "Resource":"*"
+                        }
+                     ]
+                  }
+               }
+            ]
+         }
+      },
+      "LambdaFunction":{  
+         "Type":"AWS::Lambda::Function",
+         "Properties":{  
+            "Code":{
+               "ZipFile": { "Fn::Join": ["", [
+                  "var response = require('cfn-response');",
+                  "var AWS = require('aws-sdk');",
+                  "AWS.config.update({region: 'ap-southeast-2'});",
+                  "var ec2 = new AWS.EC2();",
+                  "exports.handler = function(event, context) {" ,
+                  "ec2.describeInstances(function(err, data) {",
+                  "if (err) console.log(err, err.stack);",
+                  "else  { ",
+                  "var accountId =",
+                  { "Ref": "AWS::AccountId" },
+                  "; for(var r=0,rlen=data.Reservations.length; r<rlen; r++) {",
+                  "var reservation = data.Reservations[r];var instance;",
+                  "for(var i=0,ilen=reservation.Instances.length; i<ilen; ++i) { instance = reservation.Instances[i];",
+                  "var cpmtagpresent = false;",
+                  "if (    instance.Tags.length === 0   ){createTag(instance.InstanceId, instance.OwnerId);}",
+                  "for(var k=0,klen=instance.Tags.length; k<klen; k++){var tag = instance.Tags[k];",     
+                  "if (  tag.Key == \"cpm backup\" && tag.Value.indexOf(\"_daily:daily\") > -1 ){ cpmtagpresent = true; continue;",
+                  "} else if (  tag.Key == \"asg tag\"  ){ cpmtagpresent = true;continue; } } if ( cpmtagpresent == false )",
+                  "  createTag(instance.InstanceId, accountId); }  }  } }); };",
+                  "function createTag( instance,account ){",
+                  "var params = { Resources: [instance], ",
+                  "Tags: [{Key: \"cpm backup\",Value: account+\"_daily:daily\"+\" \"+account+\"_weekly:weekly\"+\" \"+",
+                  "account+\"_monthly:monthly\"+\" \"+account+\"_yearly:yearly\"}]};ec2.createTags(params, function(err, data) {",
+                  "if (err) console.log(err, err.stack); else     console.log(data);});}"
+               ]]}
+            },
+            "FunctionName":{  
+               "Fn::Join":[  
+                  "-",
+                  [  
+                     {  
+                        "Ref":"AWS::StackName"
+                     },
+                     "CreateCPMtag"
+                  ]
+               ]
+            },
+            "Handler":"index.handler",
+            "MemorySize":"128",
+            "Role":{  
+               "Fn::GetAtt":[  
+                  "LambdaRole",
+                  "Arn"
+               ]
+            },
+            "Runtime":"nodejs6.10",
+            "Timeout":"300"
+         }
+      },
+      "ScheduledRule":{  
+         "Type":"AWS::Events::Rule",
+         "Properties":{  
+            "Description":"ScheduledRule",
+            "ScheduleExpression":"rate(1 hour)",
+            "State":"ENABLED",
+            "Targets":[  
+               {  
+                  "Arn":{  
+                     "Fn::GetAtt":[  
+                        "LambdaFunction",
+                        "Arn"
+                     ]
+                  },
+                  "Id":"create-cpm-tag"
+               }
+            ]
+         }
+      },
+      "PermissionForEventsToInvokeLambda":{  
+         "Type":"AWS::Lambda::Permission",
+         "Properties":{  
+            "FunctionName":{  
+               "Ref":"LambdaFunction"
+            },
+            "Action":"lambda:InvokeFunction",
+            "Principal":"events.amazonaws.com",
+            "SourceArn":{  
+               "Fn::GetAtt":[  
+                  "ScheduledRule",
+                  "Arn"
+               ]
+            }
+         }
+      }
+   }
+}

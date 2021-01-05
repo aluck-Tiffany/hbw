@@ -1,0 +1,270 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Deploy Template",
+    "Parameters": {
+        "CICDBucket": {
+            "Description": "CI/CD Functions Bucket",
+            "Type": "String"
+        },
+        "DewfordAssumeRoleVersion": {
+            "Type": "String",
+            "Default": "latest"
+        },
+        "DewfordCreateChangeSetVersion": {
+            "Type": "String",
+            "Default": "latest"
+        },
+        "DewfordDescribeChangeSetVersion": {
+            "Type": "String",
+            "Default": "latest"
+        },
+        "DewfordExecuteChangeSetVersion": {
+            "Type": "String",
+            "Default": "latest"
+        },
+        "DewfordDescribeStackVersion": {
+            "Type": "String",
+            "Default": "latest"
+        },
+        "DewfordDeleteChangeSetVersion": {
+            "Type": "String",
+            "Default": "latest"
+        }
+    },
+    "Resources": {
+        "FunctionRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": "lambda.amazonaws.com"
+                            },
+                            "Action": "sts:AssumeRole"
+                        }
+                    ]
+                },
+                "ManagedPolicyArns": [
+                    "arn:aws:iam::aws:policy/AdministratorAccess"
+                ],
+                "Policies": [
+                    {
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": {
+                                "Effect": "Allow",
+                                "Action": "sts:AssumeRole",
+                                "Resource": "*"
+                            }
+                        },
+                        "PolicyName": "AssumeRole"
+                    }
+                ]
+            }
+        },
+        "DewfordAssumeRole": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Code": {
+                    "S3Bucket": {
+                        "Ref": "CICDBucket"
+                    },
+                    "S3Key": {
+                        "Fn::Sub": "aws-msp-dewford/DewfordAssumeRole/${DewfordAssumeRoleVersion}/function.zip"
+                    }
+                },
+                "Handler": "index.handler",
+                "MemorySize": 128,
+                "Role": {
+                    "Fn::GetAtt": [
+                        "FunctionRole",
+                        "Arn"
+                    ]
+                },
+                "Runtime": "nodejs6.10",
+                "Timeout": 5
+            }
+        },
+        "DewfordCreateChangeSet": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Code": {
+                    "S3Bucket": {
+                        "Ref": "CICDBucket"
+                    },
+                    "S3Key": {
+                        "Fn::Sub": "aws-msp-dewford/DewfordCreateChangeSet/${DewfordCreateChangeSetVersion}/function.zip"
+                    }
+                },
+                "Handler": "index.handler",
+                "MemorySize": 128,
+                "Role": {
+                    "Fn::GetAtt": [
+                        "FunctionRole",
+                        "Arn"
+                    ]
+                },
+                "Runtime": "nodejs6.10",
+                "Timeout": 5
+            }
+        },
+        "DewfordDescribeChangeSet": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Code": {
+                    "S3Bucket": {
+                        "Ref": "CICDBucket"
+                    },
+                    "S3Key": {
+                        "Fn::Sub": "aws-msp-dewford/DewfordDescribeChangeSet/${DewfordDescribeChangeSetVersion}/function.zip"
+                    }
+                },
+                "Handler": "index.handler",
+                "MemorySize": 128,
+                "Role": {
+                    "Fn::GetAtt": [
+                        "FunctionRole",
+                        "Arn"
+                    ]
+                },
+                "Runtime": "nodejs6.10",
+                "Timeout": 5
+            }
+        },
+        "DewfordExecuteChangeSet": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Code": {
+                    "S3Bucket": {
+                        "Ref": "CICDBucket"
+                    },
+                    "S3Key": {
+                        "Fn::Sub": "aws-msp-dewford/DewfordExecuteChangeSet/${DewfordExecuteChangeSetVersion}/function.zip"
+                    }
+                },
+                "Handler": "index.handler",
+                "MemorySize": 128,
+                "Role": {
+                    "Fn::GetAtt": [
+                        "FunctionRole",
+                        "Arn"
+                    ]
+                },
+                "Runtime": "nodejs6.10",
+                "Timeout": 5
+            }
+        },
+        "DewfordDescribeStack": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Code": {
+                    "S3Bucket": {
+                        "Ref": "CICDBucket"
+                    },
+                    "S3Key": {
+                        "Fn::Sub": "aws-msp-dewford/DewfordDescribeStack/${DewfordDescribeStackVersion}/function.zip"
+                    }
+                },
+                "Handler": "index.handler",
+                "MemorySize": 128,
+                "Role": {
+                    "Fn::GetAtt": [
+                        "FunctionRole",
+                        "Arn"
+                    ]
+                },
+                "Runtime": "nodejs6.10",
+                "Timeout": 5
+            }
+        },
+        "DewfordDeleteChangeSet": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Code": {
+                    "S3Bucket": {
+                        "Ref": "CICDBucket"
+                    },
+                    "S3Key": {
+                        "Fn::Sub": "aws-msp-dewford/DewfordDeleteChangeSet/${DewfordDeleteChangeSetVersion}/function.zip"
+                    }
+                },
+                "Handler": "index.handler",
+                "MemorySize": 128,
+                "Role": {
+                    "Fn::GetAtt": [
+                        "FunctionRole",
+                        "Arn"
+                    ]
+                },
+                "Runtime": "nodejs6.10",
+                "Timeout": 5
+            }
+        },
+        "StateMachineRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": {
+                                    "Fn::Sub": "states.${AWS::Region}.amazonaws.com"
+                                }
+                            },
+                            "Action": "sts:AssumeRole"
+                        }
+                    ]
+                },
+                "Policies": [
+                    {
+                        "PolicyName": {
+                            "Fn::Sub": "${AWS::StackName}"
+                        },
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "lambda:InvokeFunction"
+                                    ],
+                                    "Resource": "*"
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "StateMachine": {
+            "Type": "AWS::StepFunctions::StateMachine",
+            "Properties": {
+                "DefinitionString": {
+                    "Fn::Sub": "{\n    \"Comment\": \"Deploy Stack Machine\",\n    \"StartAt\": \"AssumeRole\",\n    \"States\": {\n        \"AssumeRole\": {\n            \"Type\": \"Task\",\n            \"Resource\": \"${DewfordAssumeRole.Arn}\",\n            \"ResultPath\": \"$.global.credentials\",\n            \"Next\": \"CreateChangeSet\",\n            \"Catch\": [\n                {\n                    \"ErrorEquals\": [\n                        \"States.ALL\"\n                    ],\n                    \"Next\": \"Fail\"\n                }\n            ]\n        },\n        \"CreateChangeSet\": {\n            \"Type\": \"Task\",\n            \"Resource\": \"${DewfordCreateChangeSet.Arn}\",\n            \"Next\": \"DescribeChangeSet\",\n            \"Catch\": [\n                {\n                    \"ErrorEquals\": [\n                        \"Exists\"\n                    ],\n                    \"ResultPath\": \"$.local.template.error\",\n                    \"Next\": \"UpdatePass\"\n                },\n                {\n                    \"ErrorEquals\": [\n                        \"States.ALL\"\n                    ],\n                    \"Next\": \"Fail\"\n                }\n            ]\n        },\n        \"UpdatePass\": {\n            \"Type\": \"Pass\",\n            \"Result\": {\n                \"update\": true\n            },\n            \"ResultPath\": \"$.local.template.update\",\n            \"Next\": \"CreateChangeSet\"\n        },\n        \"DescribeChangeSet\": {\n            \"Type\": \"Task\",\n            \"Resource\": \"${DewfordDescribeChangeSet.Arn}\",\n            \"Next\": \"HasDescribeChangeSetStatusCreateComplete\",\n            \"Catch\": [\n                {\n                    \"ErrorEquals\": [\n                        \"States.ALL\"\n                    ],\n                    \"Next\": \"Fail\"\n                }\n            ],\n            \"ResultPath\": \"$.local.changeSet\"\n        },\n        \"HasDescribeChangeSetStatusCreateComplete\": {\n            \"Type\": \"Choice\",\n            \"Choices\": [\n                {\n                    \"Variable\": \"$.local.changeSet.Status\",\n                    \"StringEquals\": \"CREATE_COMPLETE\",\n                    \"Next\": \"ExecuteChangeSet\"\n                },\n                {\n                    \"Variable\": \"$.local.changeSet.Status\",\n                    \"StringEquals\": \"FAILED\",\n                    \"Next\": \"HasDescribeChangeSetStatusReasonNoChanges\"\n                }\n            ],\n            \"Default\": \"WaitForDescribeChangeSetStatusCreateComplete\"\n        },\n        \"HasDescribeChangeSetStatusReasonNoChanges\": {\n            \"Type\": \"Choice\",\n            \"Choices\": [\n                {\n                    \"Variable\": \"$.local.changeSet.StatusReason\",\n                    \"StringEquals\": \"The submitted information didn't contain changes. Submit different information to create a change set.\",\n                    \"Next\": \"DeleteChangeSet\"\n                }\n            ],\n            \"Default\": \"Fail\"\n        },\n        \"WaitForDescribeChangeSetStatusCreateComplete\": {\n            \"Type\": \"Wait\",\n            \"Seconds\": 5,\n            \"Next\": \"DescribeChangeSet\"\n        },\n        \"ExecuteChangeSet\": {\n            \"Type\": \"Task\",\n            \"Resource\": \"${DewfordExecuteChangeSet.Arn}\",\n            \"Next\": \"DescribeStack\",\n            \"Catch\": [\n                {\n                    \"ErrorEquals\": [\n                        \"States.ALL\"\n                    ],\n                    \"Next\": \"Fail\"\n                }\n            ]\n        },\n        \"DeleteChangeSet\": {\n            \"Type\": \"Task\",\n            \"Resource\": \"${DewfordDeleteChangeSet.Arn}\",\n            \"Next\": \"Succeed\",\n            \"Catch\": [\n                {\n                    \"ErrorEquals\": [\n                        \"States.ALL\"\n                    ],\n                    \"Next\": \"Fail\"\n                }\n            ]\n        },\n        \"DescribeStack\": {\n            \"Type\": \"Task\",\n            \"Resource\": \"${DewfordDescribeStack.Arn}\",\n            \"Next\": \"HasDescribeStacksStackStatusCreateComplete\",\n            \"ResultPath\": \"$.local.stack\",\n            \"Catch\": [\n                {\n                    \"ErrorEquals\": [\n                        \"States.ALL\"\n                    ],\n                    \"Next\": \"Fail\"\n                }\n            ]\n        },\n        \"HasDescribeStacksStackStatusCreateComplete\": {\n            \"Type\": \"Choice\",\n            \"Choices\": [\n                {\n                    \"Variable\": \"$.local.stack.StackStatus\",\n                    \"StringEquals\": \"CREATE_COMPLETE\",\n                    \"Next\": \"Succeed\"\n                },\n                {\n                    \"Variable\": \"$.local.stack.StackStatus\",\n                    \"StringEquals\": \"UPDATE_COMPLETE\",\n                    \"Next\": \"Succeed\"\n                }\n            ],\n            \"Default\": \"Wait\"\n        },\n        \"Wait\": {\n            \"Type\": \"Wait\",\n            \"Seconds\": 5,\n            \"Next\": \"DescribeStack\"\n        },\n        \"Succeed\": {\n            \"Type\": \"Succeed\"\n        },\n        \"Fail\": {\n            \"Type\": \"Fail\"\n        }\n    }\n}"
+                },
+                "RoleArn": {
+                    "Fn::GetAtt": [
+                        "StateMachineRole",
+                        "Arn"
+                    ]
+                }
+            }
+        }
+    },
+    "Outputs": {
+        "DeployTemplateMachine": {
+            "Description": "DeployTemplateMachine",
+            "Value": {
+                "Ref": "StateMachine"
+            },
+            "Export": {
+                "Name": "DeployTemplateMachine"
+            }
+        }
+    }
+}

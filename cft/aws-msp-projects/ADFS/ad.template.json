@@ -1,0 +1,94 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "AWS Microsoft AD, ADFS, WAP",
+    "Parameters": {
+        "DomainDNSName": {
+            "Type": "String"
+        },
+        "DomainNetBIOSName": {
+            "Type": "String"
+        },
+        "MicrosoftADPW": {
+            "Type": "String",
+            "NoEcho": "true"
+        },
+        "Customer": {
+            "Type": "String",
+            "Description": "Optional: Customer Name - This is only to be used if more than one customer AD is deployed into the account",
+            "Default": ""
+        }
+    },
+    "Resources": {
+        "MicrosoftAD": {
+            "Type": "AWS::DirectoryService::MicrosoftAD",
+            "Properties": {
+                "Name": {
+                    "Ref": "DomainDNSName"
+                },
+                "ShortName": {
+                    "Ref": "DomainNetBIOSName"
+                },
+                "Password": {
+                    "Ref": "MicrosoftADPW"
+                },
+                "Edition": "Standard",
+                "VpcSettings": {
+                    "SubnetIds": [{
+                            "Fn::ImportValue": "SecuredASubnet"
+                        },
+                        {
+                            "Fn::ImportValue": "SecuredBSubnet"
+                        }
+                    ],
+                    "VpcId": {
+                        "Fn::ImportValue": "VPC"
+                    }
+                }
+            }
+        }
+    },
+    "Outputs": {
+        "DomainDNSName": {
+            "Description": "Microsoft AD DNS name",
+            "Value": {
+                "Ref": "DomainDNSName"
+            },
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "${Customer}DomainDNSName"
+                }
+            }
+        },
+        "DomainNetBIOSName": {
+            "Description": "Microsoft AD NetBios name",
+            "Value": {
+                "Ref": "DomainNetBIOSName"
+            },
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "${Customer}DomainNetBIOSName"
+                }
+            }
+        },
+        "DnsIpAddresses": {
+            "Description": "Microsoft AD DNS server IP addresses",
+            "Value": {
+                "Fn::Join": [
+                    ",",
+                    {
+                        "Fn::GetAtt": [
+                            "MicrosoftAD",
+                            "DnsIpAddresses"
+                        ]
+                    }
+
+                ]
+            },
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "${Customer}DnsIpAddresses"
+                }
+            }
+        }
+    }
+}

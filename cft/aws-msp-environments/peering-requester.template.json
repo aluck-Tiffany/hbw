@@ -1,0 +1,172 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Requester VPC Peering and Routes",
+  "Parameters": {
+    "PeerVpcId": {
+      "Type": "String"
+    },
+    "DestinationCidrBlock": {
+      "Type": "String"
+    },
+    "PeerOwnerId": {
+      "Type": "String"
+    },
+    "PeerRoleArn": {
+      "Type": "String"
+    },
+    "VPCIdentifier": {
+      "Type": "String",
+      "Description": "Specify the VPC Identifier - This is only to be used if more than one VPC is being deployed into the account",
+      "Default": ""
+    }
+  },
+  "Resources": {
+    "VPCPeeringConnection": {
+      "Type": "AWS::EC2::VPCPeeringConnection",
+      "Properties": {
+        "VpcId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "VPC${VPCIdentifier}"
+          }
+        },
+        "PeerVpcId": {
+          "Ref": "PeerVpcId"
+        },
+        "PeerOwnerId": {
+          "Ref": "PeerOwnerId"
+        },
+        "PeerRoleArn": {
+          "Ref": "PeerRoleArn"
+        }
+      }
+    },
+    "ControlledARoute": {
+      "Type": "AWS::EC2::Route",
+      "Properties": {
+        "DestinationCidrBlock": {
+          "Ref": "DestinationCidrBlock"
+        },
+        "RouteTableId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "ControlledARouteTable${VPCIdentifier}"
+          }
+        },
+        "VpcPeeringConnectionId": {
+          "Ref": "VPCPeeringConnection"
+        }
+      }
+    },
+    "ControlledBRoute": {
+      "Type": "AWS::EC2::Route",
+      "Properties": {
+        "DestinationCidrBlock": {
+          "Ref": "DestinationCidrBlock"
+        },
+        "RouteTableId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "ControlledBRouteTable${VPCIdentifier}"
+          }
+        },
+        "VpcPeeringConnectionId": {
+          "Ref": "VPCPeeringConnection"
+        }
+      }
+    },
+    "ControlledCRoute": {
+      "Type": "AWS::EC2::Route",
+      "Properties": {
+        "DestinationCidrBlock": {
+          "Ref": "DestinationCidrBlock"
+        },
+        "RouteTableId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "ControlledCRouteTable${VPCIdentifier}"
+          }
+        },
+        "VpcPeeringConnectionId": {
+          "Ref": "VPCPeeringConnection"
+        }
+      }
+    },
+    "RestrictedARoute": {
+      "Type": "AWS::EC2::Route",
+      "Properties": {
+        "DestinationCidrBlock": {
+          "Ref": "DestinationCidrBlock"
+        },
+        "RouteTableId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "RestrictedARouteTable${VPCIdentifier}"
+          }
+        },
+        "VpcPeeringConnectionId": {
+          "Ref": "VPCPeeringConnection"
+        }
+      }
+    },
+    "RestrictedBRoute": {
+      "Type": "AWS::EC2::Route",
+      "Properties": {
+        "DestinationCidrBlock": {
+          "Ref": "DestinationCidrBlock"
+        },
+        "RouteTableId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "RestrictedBRouteTable${VPCIdentifier}"
+          }
+        },
+        "VpcPeeringConnectionId": {
+          "Ref": "VPCPeeringConnection"
+        }
+      }
+    },
+    "RestrictedCRoute": {
+      "Type": "AWS::EC2::Route",
+      "Properties": {
+        "DestinationCidrBlock": {
+          "Ref": "DestinationCidrBlock"
+        },
+        "RouteTableId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "RestrictedCRouteTable${VPCIdentifier}"
+          }
+        },
+        "VpcPeeringConnectionId": {
+          "Ref": "VPCPeeringConnection"
+        }
+      }
+    },
+    "SecuredARoute": {
+      "Type": "AWS::EC2::Route",
+      "Properties": {
+        "DestinationCidrBlock": {
+          "Ref": "DestinationCidrBlock"
+        },
+        "RouteTableId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "SecuredARouteTable${VPCIdentifier}"
+          }
+        },
+        "VpcPeeringConnectionId": {
+          "Ref": "VPCPeeringConnection"
+        }
+      }
+    },
+    "SecuredBRoute": {
+      "Type": "AWS::EC2::Route",
+      "Properties": {
+        "DestinationCidrBlock": {
+          "Ref": "DestinationCidrBlock"
+        },
+        "RouteTableId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "SecuredBRouteTable${VPCIdentifier}"
+          }
+        },
+        "VpcPeeringConnectionId": {
+          "Ref": "VPCPeeringConnection"
+        }
+      }
+    }
+  }
+}

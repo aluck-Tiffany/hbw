@@ -1,0 +1,1177 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Creates CloudWatch Alerts for Instances",
+  "Metadata": {
+    "AWS::CloudFormation::Interface": {
+      "ParameterGroups": [
+        {
+          "Label": {
+            "default": "Configure CloudWatch Alerts for Instances"
+          },
+          "Parameters": [
+            "InstanceId1",
+            "InstanceId2",
+            "InstanceId3",
+            "InstanceId4",
+            "InstanceId5",
+            "InstanceId6"
+          ]
+        },
+        {
+          "Label": {
+            "default": "Configure CloudWatch Alerts for Classic Load Balancers"
+          },
+          "Parameters": [
+            "LBName1",
+            "LBName2"
+          ]
+        },
+        {
+          "Label": {
+            "default": "Configure Email Endpoints for Alerts"
+          },
+          "Parameters": [
+            "Endpoint1",
+            "Endpoint2"
+          ]
+        }
+      ],
+      "ParameterLabels": {
+        "InstanceId1": {
+          "default": "Specify the Instance ID (you must at least specify one)"
+        },
+        "InstanceId2": {
+          "default": "Specify the Instance ID (leave blank for none)"
+        },
+        "InstanceId3": {
+          "default": "Specify the Instance ID (leave blank for none)"
+        },
+        "InstanceId4": {
+          "default": "Specify the Instance ID (leave blank for none)"
+        },
+        "InstanceId5": {
+          "default": "Specify the Instance ID (leave blank for none)"
+        },
+        "InstanceId6": {
+          "default": "Specify the Instance ID (leave blank for none)"
+        },
+        "LBName1": {
+          "default": "Specify the Load Balancer Name (leave blank for none)"
+        },
+        "LBName2": {
+          "default": "Specify the Load Balancer Name (leave blank for none)"
+        },
+        "Endpoint1": {
+          "default": "Email Address (you must at least specify one)"
+        },
+        "Endpoint2": {
+          "default": "Email Address (leave blank for none)"
+        }
+      }
+    }
+  },
+  "Parameters": {
+    "InstanceId1": {
+      "Type": "String"
+    },
+    "InstanceId2": {
+      "Type": "String"
+    },
+    "InstanceId3": {
+      "Type": "String"
+    },
+    "InstanceId4": {
+      "Type": "String"
+    },
+    "InstanceId5": {
+      "Type": "String"
+    },
+    "InstanceId6": {
+      "Type": "String"
+    },
+    "LBName1": {
+      "Type": "String"
+    },
+    "LBName2": {
+      "Type": "String"
+    },
+    "Endpoint1": {
+      "Type": "String"
+    },
+    "Endpoint2": {
+      "Type": "String"
+    }
+  },
+  "Conditions": {
+    "Instance2AlarmCond": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "InstanceId2"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "Instance3AlarmCond": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "InstanceId3"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "Instance4AlarmCond": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "InstanceId4"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "Instance5AlarmCond": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "InstanceId5"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "Instance6AlarmCond": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "InstanceId6"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "LB1AlarmCond": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "LBName1"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "LB2AlarmCond": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "LBName2"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "Endpoint2Cond": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "Endpoint2"
+            },
+            ""
+          ]
+        }
+      ]
+    }
+  },
+  "Resources": {
+    "CPUAlarm1": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Join": [
+            " ",
+            [
+              "CPU",
+              "Alert",
+              {
+                "Ref": "InstanceId1"
+              }
+            ]
+          ]
+        },
+        "AlarmDescription": "Alarm if CPU too high",
+        "AlarmActions": [
+          {
+            "Ref": "InstanceAlertsTopic"
+          }
+        ],
+        "MetricName": "CPUUtilization",
+        "Namespace": "AWS/EC2",
+        "Statistic": "Average",
+        "Period": "60",
+        "EvaluationPeriods": "3",
+        "Threshold": "90",
+        "ComparisonOperator": "GreaterThanThreshold",
+        "Dimensions": [
+          {
+            "Name": "InstanceId",
+            "Value": {
+              "Ref": "InstanceId1"
+            }
+          }
+        ]
+      }
+    },
+    "SystemStatusCheckAlarm1": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Join": [
+            " ",
+            [
+              "System",
+              "Check",
+              "Recovery",
+              {
+                "Ref": "InstanceId1"
+              }
+            ]
+          ]
+        },
+        "AlarmDescription": "Recover Instance if System Check Fails",
+        "AlarmActions": [
+          {
+            "Fn::Join": [
+              "",
+              [
+                "arn:aws:automate:",
+                {
+                  "Ref": "AWS::Region"
+                },
+                ":ec2:recover"
+              ]
+            ]
+          },
+          {
+            "Ref": "InstanceAlertsTopic"
+          }
+        ],
+        "MetricName": "StatusCheckFailed_System",
+        "Namespace": "AWS/EC2",
+        "ComparisonOperator": "GreaterThanThreshold",
+        "EvaluationPeriods": "10",
+        "Period": "60",
+        "Statistic": "Sum",
+        "Threshold": "0",
+        "Dimensions": [
+          {
+            "Name": "InstanceId",
+            "Value": {
+              "Ref": "InstanceId1"
+            }
+          }
+        ]
+      }
+    },
+    "InstanceStatusCheckAlarm1": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Join": [
+            " ",
+            [
+              "Instance",
+              "Check",
+              "Recovery",
+              {
+                "Ref": "InstanceId1"
+              }
+            ]
+          ]
+        },
+        "AlarmDescription": "Reboot Instance if Instance Status Check Fails",
+        "AlarmActions": [
+          {
+            "Fn::Join": [
+              "",
+              [
+                "arn:aws:automate:",
+                {
+                  "Ref": "AWS::Region"
+                },
+                ":ec2:reboot"
+              ]
+            ]
+          },
+          {
+            "Ref": "InstanceAlertsTopic"
+          }
+        ],
+        "MetricName": "StatusCheckFailed_Instance",
+        "Namespace": "AWS/EC2",
+        "ComparisonOperator": "GreaterThanThreshold",
+        "EvaluationPeriods": "10",
+        "Period": "60",
+        "Statistic": "Sum",
+        "Threshold": "0",
+        "Dimensions": [
+          {
+            "Name": "InstanceId",
+            "Value": {
+              "Ref": "InstanceId1"
+            }
+          }
+        ]
+      }
+    },
+    "CPUAlarm2": {
+      "Condition": "Instance2AlarmCond",
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Join": [
+            " ",
+            [
+              "CPU",
+              "Alert",
+              {
+                "Ref": "InstanceId2"
+              }
+            ]
+          ]
+        },
+        "AlarmDescription": "Alarm if CPU too high",
+        "AlarmActions": [
+          {
+            "Ref": "InstanceAlertsTopic"
+          }
+        ],
+        "MetricName": "CPUUtilization",
+        "Namespace": "AWS/EC2",
+        "Statistic": "Average",
+        "Period": "60",
+        "EvaluationPeriods": "3",
+        "Threshold": "90",
+        "ComparisonOperator": "GreaterThanThreshold",
+        "Dimensions": [
+          {
+            "Name": "InstanceId",
+            "Value": {
+              "Ref": "InstanceId2"
+            }
+          }
+        ]
+      }
+    },
+    "SystemStatusCheckAlarm2": {
+      "Condition": "Instance2AlarmCond",
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Join": [
+            " ",
+            [
+              "System",
+              "Check",
+              "Recovery",
+              {
+                "Ref": "InstanceId2"
+              }
+            ]
+          ]
+        },
+        "AlarmDescription": "Recover Instance if System Check Fails",
+        "AlarmActions": [
+          {
+            "Fn::Join": [
+              "",
+              [
+                "arn:aws:automate:",
+                {
+                  "Ref": "AWS::Region"
+                },
+                ":ec2:recover"
+              ]
+            ]
+          },
+          {
+            "Ref": "InstanceAlertsTopic"
+          }
+        ],
+        "MetricName": "StatusCheckFailed_System",
+        "Namespace": "AWS/EC2",
+        "ComparisonOperator": "GreaterThanThreshold",
+        "EvaluationPeriods": "10",
+        "Period": "60",
+        "Statistic": "Sum",
+        "Threshold": "0",
+        "Dimensions": [
+          {
+            "Name": "InstanceId",
+            "Value": {
+              "Ref": "InstanceId2"
+            }
+          }
+        ]
+      }
+    },
+    "InstanceStatusCheckAlarm2": {
+      "Condition": "Instance2AlarmCond",
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Join": [
+            " ",
+            [
+              "Instance",
+              "Check",
+              "Recovery",
+              {
+                "Ref": "InstanceId2"
+              }
+            ]
+          ]
+        },
+        "AlarmDescription": "Reboot Instance if Instance Status Check Fails",
+        "AlarmActions": [
+          {
+            "Fn::Join": [
+              "",
+              [
+                "arn:aws:automate:",
+                {
+                  "Ref": "AWS::Region"
+                },
+                ":ec2:reboot"
+              ]
+            ]
+          },
+          {
+            "Ref": "InstanceAlertsTopic"
+          }
+        ],
+        "MetricName": "StatusCheckFailed_Instance",
+        "Namespace": "AWS/EC2",
+        "ComparisonOperator": "GreaterThanThreshold",
+        "EvaluationPeriods": "10",
+        "Period": "60",
+        "Statistic": "Sum",
+        "Threshold": "0",
+        "Dimensions": [
+          {
+            "Name": "InstanceId",
+            "Value": {
+              "Ref": "InstanceId2"
+            }
+          }
+        ]
+      }
+    },
+    "CPUAlarm3": {
+      "Condition": "Instance3AlarmCond",
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Join": [
+            " ",
+            [
+              "CPU",
+              "Alert",
+              {
+                "Ref": "InstanceId3"
+              }
+            ]
+          ]
+        },
+        "AlarmDescription": "Alarm if CPU too high",
+        "AlarmActions": [
+          {
+            "Ref": "InstanceAlertsTopic"
+          }
+        ],
+        "MetricName": "CPUUtilization",
+        "Namespace": "AWS/EC2",
+        "Statistic": "Average",
+        "Period": "60",
+        "EvaluationPeriods": "3",
+        "Threshold": "90",
+        "ComparisonOperator": "GreaterThanThreshold",
+        "Dimensions": [
+          {
+            "Name": "InstanceId",
+            "Value": {
+              "Ref": "InstanceId3"
+            }
+          }
+        ]
+      }
+    },
+    "SystemStatusCheckAlarm3": {
+      "Condition": "Instance3AlarmCond",
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Join": [
+            " ",
+            [
+              "System",
+              "Check",
+              "Recovery",
+              {
+                "Ref": "InstanceId3"
+              }
+            ]
+          ]
+        },
+        "AlarmDescription": "Recover Instance if System Check Fails",
+        "AlarmActions": [
+          {
+            "Fn::Join": [
+              "",
+              [
+                "arn:aws:automate:",
+                {
+                  "Ref": "AWS::Region"
+                },
+                ":ec2:recover"
+              ]
+            ]
+          },
+          {
+            "Ref": "InstanceAlertsTopic"
+          }
+        ],
+        "MetricName": "StatusCheckFailed_System",
+        "Namespace": "AWS/EC2",
+        "ComparisonOperator": "GreaterThanThreshold",
+        "EvaluationPeriods": "10",
+        "Period": "60",
+        "Statistic": "Sum",
+        "Threshold": "0",
+        "Dimensions": [
+          {
+            "Name": "InstanceId",
+            "Value": {
+              "Ref": "InstanceId3"
+            }
+          }
+        ]
+      }
+    },
+    "InstanceStatusCheckAlarm3": {
+      "Condition": "Instance3AlarmCond",
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Join": [
+            " ",
+            [
+              "Instance",
+              "Check",
+              "Recovery",
+              {
+                "Ref": "InstanceId3"
+              }
+            ]
+          ]
+        },
+        "AlarmDescription": "Reboot Instance if Instance Status Check Fails",
+        "AlarmActions": [
+          {
+            "Fn::Join": [
+              "",
+              [
+                "arn:aws:automate:",
+                {
+                  "Ref": "AWS::Region"
+                },
+                ":ec2:reboot"
+              ]
+            ]
+          },
+          {
+            "Ref": "InstanceAlertsTopic"
+          }
+        ],
+        "MetricName": "StatusCheckFailed_Instance",
+        "Namespace": "AWS/EC2",
+        "ComparisonOperator": "GreaterThanThreshold",
+        "EvaluationPeriods": "10",
+        "Period": "60",
+        "Statistic": "Sum",
+        "Threshold": "0",
+        "Dimensions": [
+          {
+            "Name": "InstanceId",
+            "Value": {
+              "Ref": "InstanceId3"
+            }
+          }
+        ]
+      }
+    },
+    "CPUAlarm4": {
+      "Condition": "Instance4AlarmCond",
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Join": [
+            " ",
+            [
+              "CPU",
+              "Alert",
+              {
+                "Ref": "InstanceId4"
+              }
+            ]
+          ]
+        },
+        "AlarmDescription": "Alarm if CPU too high",
+        "AlarmActions": [
+          {
+            "Ref": "InstanceAlertsTopic"
+          }
+        ],
+        "MetricName": "CPUUtilization",
+        "Namespace": "AWS/EC2",
+        "Statistic": "Average",
+        "Period": "60",
+        "EvaluationPeriods": "3",
+        "Threshold": "90",
+        "ComparisonOperator": "GreaterThanThreshold",
+        "Dimensions": [
+          {
+            "Name": "InstanceId",
+            "Value": {
+              "Ref": "InstanceId4"
+            }
+          }
+        ]
+      }
+    },
+    "SystemStatusCheckAlarm4": {
+      "Condition": "Instance4AlarmCond",
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Join": [
+            " ",
+            [
+              "System",
+              "Check",
+              "Recovery",
+              {
+                "Ref": "InstanceId4"
+              }
+            ]
+          ]
+        },
+        "AlarmDescription": "Recover Instance if System Check Fails",
+        "AlarmActions": [
+          {
+            "Fn::Join": [
+              "",
+              [
+                "arn:aws:automate:",
+                {
+                  "Ref": "AWS::Region"
+                },
+                ":ec2:recover"
+              ]
+            ]
+          },
+          {
+            "Ref": "InstanceAlertsTopic"
+          }
+        ],
+        "MetricName": "StatusCheckFailed_System",
+        "Namespace": "AWS/EC2",
+        "ComparisonOperator": "GreaterThanThreshold",
+        "EvaluationPeriods": "10",
+        "Period": "60",
+        "Statistic": "Sum",
+        "Threshold": "0",
+        "Dimensions": [
+          {
+            "Name": "InstanceId",
+            "Value": {
+              "Ref": "InstanceId4"
+            }
+          }
+        ]
+      }
+    },
+    "InstanceStatusCheckAlarm4": {
+      "Condition": "Instance4AlarmCond",
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Join": [
+            " ",
+            [
+              "Instance",
+              "Check",
+              "Recovery",
+              {
+                "Ref": "InstanceId4"
+              }
+            ]
+          ]
+        },
+        "AlarmDescription": "Reboot Instance if Instance Status Check Fails",
+        "AlarmActions": [
+          {
+            "Fn::Join": [
+              "",
+              [
+                "arn:aws:automate:",
+                {
+                  "Ref": "AWS::Region"
+                },
+                ":ec2:reboot"
+              ]
+            ]
+          },
+          {
+            "Ref": "InstanceAlertsTopic"
+          }
+        ],
+        "MetricName": "StatusCheckFailed_Instance",
+        "Namespace": "AWS/EC2",
+        "ComparisonOperator": "GreaterThanThreshold",
+        "EvaluationPeriods": "10",
+        "Period": "60",
+        "Statistic": "Sum",
+        "Threshold": "0",
+        "Dimensions": [
+          {
+            "Name": "InstanceId",
+            "Value": {
+              "Ref": "InstanceId4"
+            }
+          }
+        ]
+      }
+    },
+    "CPUAlarm5": {
+      "Condition": "Instance5AlarmCond",
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Join": [
+            " ",
+            [
+              "CPU",
+              "Alert",
+              {
+                "Ref": "InstanceId5"
+              }
+            ]
+          ]
+        },
+        "AlarmDescription": "Alarm if CPU too high",
+        "AlarmActions": [
+          {
+            "Ref": "InstanceAlertsTopic"
+          }
+        ],
+        "MetricName": "CPUUtilization",
+        "Namespace": "AWS/EC2",
+        "Statistic": "Average",
+        "Period": "60",
+        "EvaluationPeriods": "3",
+        "Threshold": "90",
+        "ComparisonOperator": "GreaterThanThreshold",
+        "Dimensions": [
+          {
+            "Name": "InstanceId",
+            "Value": {
+              "Ref": "InstanceId5"
+            }
+          }
+        ]
+      }
+    },
+    "SystemStatusCheckAlarm5": {
+      "Condition": "Instance5AlarmCond",
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Join": [
+            " ",
+            [
+              "System",
+              "Check",
+              "Recovery",
+              {
+                "Ref": "InstanceId5"
+              }
+            ]
+          ]
+        },
+        "AlarmDescription": "Recover Instance if System Check Fails",
+        "AlarmActions": [
+          {
+            "Fn::Join": [
+              "",
+              [
+                "arn:aws:automate:",
+                {
+                  "Ref": "AWS::Region"
+                },
+                ":ec2:recover"
+              ]
+            ]
+          },
+          {
+            "Ref": "InstanceAlertsTopic"
+          }
+        ],
+        "MetricName": "StatusCheckFailed_System",
+        "Namespace": "AWS/EC2",
+        "ComparisonOperator": "GreaterThanThreshold",
+        "EvaluationPeriods": "10",
+        "Period": "60",
+        "Statistic": "Sum",
+        "Threshold": "0",
+        "Dimensions": [
+          {
+            "Name": "InstanceId",
+            "Value": {
+              "Ref": "InstanceId5"
+            }
+          }
+        ]
+      }
+    },
+    "InstanceStatusCheckAlarm5": {
+      "Condition": "Instance5AlarmCond",
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Join": [
+            " ",
+            [
+              "Instance",
+              "Check",
+              "Recovery",
+              {
+                "Ref": "InstanceId5"
+              }
+            ]
+          ]
+        },
+        "AlarmDescription": "Reboot Instance if Instance Status Check Fails",
+        "AlarmActions": [
+          {
+            "Fn::Join": [
+              "",
+              [
+                "arn:aws:automate:",
+                {
+                  "Ref": "AWS::Region"
+                },
+                ":ec2:reboot"
+              ]
+            ]
+          },
+          {
+            "Ref": "InstanceAlertsTopic"
+          }
+        ],
+        "MetricName": "StatusCheckFailed_Instance",
+        "Namespace": "AWS/EC2",
+        "ComparisonOperator": "GreaterThanThreshold",
+        "EvaluationPeriods": "10",
+        "Period": "60",
+        "Statistic": "Sum",
+        "Threshold": "0",
+        "Dimensions": [
+          {
+            "Name": "InstanceId",
+            "Value": {
+              "Ref": "InstanceId5"
+            }
+          }
+        ]
+      }
+    },
+    "CPUAlarm6": {
+      "Condition": "Instance6AlarmCond",
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Join": [
+            " ",
+            [
+              "CPU",
+              "Alert",
+              {
+                "Ref": "InstanceId6"
+              }
+            ]
+          ]
+        },
+        "AlarmDescription": "Alarm if CPU too high",
+        "AlarmActions": [
+          {
+            "Ref": "InstanceAlertsTopic"
+          }
+        ],
+        "MetricName": "CPUUtilization",
+        "Namespace": "AWS/EC2",
+        "Statistic": "Average",
+        "Period": "60",
+        "EvaluationPeriods": "3",
+        "Threshold": "90",
+        "ComparisonOperator": "GreaterThanThreshold",
+        "Dimensions": [
+          {
+            "Name": "InstanceId",
+            "Value": {
+              "Ref": "InstanceId6"
+            }
+          }
+        ]
+      }
+    },
+    "SystemStatusCheckAlarm6": {
+      "Condition": "Instance6AlarmCond",
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Join": [
+            " ",
+            [
+              "System",
+              "Check",
+              "Recovery",
+              {
+                "Ref": "InstanceId6"
+              }
+            ]
+          ]
+        },
+        "AlarmDescription": "Recover Instance if System Check Fails",
+        "AlarmActions": [
+          {
+            "Fn::Join": [
+              "",
+              [
+                "arn:aws:automate:",
+                {
+                  "Ref": "AWS::Region"
+                },
+                ":ec2:recover"
+              ]
+            ]
+          },
+          {
+            "Ref": "InstanceAlertsTopic"
+          }
+        ],
+        "MetricName": "StatusCheckFailed_System",
+        "Namespace": "AWS/EC2",
+        "ComparisonOperator": "GreaterThanThreshold",
+        "EvaluationPeriods": "10",
+        "Period": "60",
+        "Statistic": "Sum",
+        "Threshold": "0",
+        "Dimensions": [
+          {
+            "Name": "InstanceId",
+            "Value": {
+              "Ref": "InstanceId6"
+            }
+          }
+        ]
+      }
+    },
+    "InstanceStatusCheckAlarm6": {
+      "Condition": "Instance6AlarmCond",
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Join": [
+            " ",
+            [
+              "Instance",
+              "Check",
+              "Recovery",
+              {
+                "Ref": "InstanceId6"
+              }
+            ]
+          ]
+        },
+        "AlarmDescription": "Reboot Instance if Instance Status Check Fails",
+        "AlarmActions": [
+          {
+            "Fn::Join": [
+              "",
+              [
+                "arn:aws:automate:",
+                {
+                  "Ref": "AWS::Region"
+                },
+                ":ec2:reboot"
+              ]
+            ]
+          },
+          {
+            "Ref": "InstanceAlertsTopic"
+          }
+        ],
+        "MetricName": "StatusCheckFailed_Instance",
+        "Namespace": "AWS/EC2",
+        "ComparisonOperator": "GreaterThanThreshold",
+        "EvaluationPeriods": "10",
+        "Period": "60",
+        "Statistic": "Sum",
+        "Threshold": "0",
+        "Dimensions": [
+          {
+            "Name": "InstanceId",
+            "Value": {
+              "Ref": "InstanceId6"
+            }
+          }
+        ]
+      }
+    },
+    "LBAlarm1": {
+      "Condition": "LB1AlarmCond",
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Join": [
+            " ",
+            [
+              "Unhealthy",
+              "Host",
+              "Count",
+              {
+                "Ref": "LBName1"
+              }
+            ]
+          ]
+        },
+        "AlarmDescription": "Alarm if unhealthy host count > 0",
+        "AlarmActions": [
+          {
+            "Ref": "InstanceAlertsTopic"
+          }
+        ],
+        "MetricName": "UnHealthyHostCount",
+        "Namespace": "AWS/ELB",
+        "ComparisonOperator": "GreaterThanThreshold",
+        "EvaluationPeriods": "1",
+        "Period": "60",
+        "Statistic": "Sum",
+        "Threshold": "0",
+        "Dimensions": [
+          {
+            "Name": "LoadBalancerName",
+            "Value": {
+              "Ref": "LBName1"
+            }
+          }
+        ]
+      }
+    },
+    "LBAlarm2": {
+      "Condition": "LB2AlarmCond",
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {
+          "Fn::Join": [
+            " ",
+            [
+              "Unhealthy",
+              "Host",
+              "Count",
+              {
+                "Ref": "LBName2"
+              }
+            ]
+          ]
+        },
+        "AlarmDescription": "Alarm if unhealthy host count > 0",
+        "AlarmActions": [
+          {
+            "Ref": "InstanceAlertsTopic"
+          }
+        ],
+        "MetricName": "UnHealthyHostCount",
+        "Namespace": "AWS/ELB",
+        "ComparisonOperator": "GreaterThanThreshold",
+        "EvaluationPeriods": "1",
+        "Period": "60",
+        "Statistic": "Sum",
+        "Threshold": "0",
+        "Dimensions": [
+          {
+            "Name": "LoadBalancerName",
+            "Value": {
+              "Ref": "LBName2"
+            }
+          }
+        ]
+      }
+    },
+    "InstanceAlertsTopic": {
+      "Type": "AWS::SNS::Topic",
+      "Properties": {
+        "TopicName": {
+          "Fn::Join": [
+            "",
+            [
+              {
+                "Ref": "AWS::AccountId"
+              },
+              "-instance-alerts"
+            ]
+          ]
+        },
+        "Subscription": [
+          {
+            "Endpoint": {
+              "Ref": "Endpoint1"
+            },
+            "Protocol": "email"
+          }
+        ]
+      }
+    },
+    "Subscription2": {
+      "Condition": "Endpoint2Cond",
+      "Type": "AWS::SNS::Subscription",
+      "Properties": {
+        "Endpoint": {
+          "Ref": "Endpoint2"
+        },
+        "Protocol": "email",
+        "TopicArn": {
+          "Ref": "InstanceAlertsTopic"
+        }
+      }
+    }
+  }
+}

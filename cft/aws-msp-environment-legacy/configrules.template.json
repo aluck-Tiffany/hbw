@@ -1,0 +1,106 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Config Rules",
+  "Resources": {
+    "RequiredTags": {
+      "Type": "AWS::Config::ConfigRule",
+      "Properties": {
+        "ConfigRuleName": "required-tags",
+        "Description": "Checks whether your resources have the tags that you specify. For example, you can check whether your EC2 instances have the 'CostCenter' tag. Separate multiple values with commas.",
+        "InputParameters": {
+          "tag1Key": "CostCentre"
+        },
+        "Scope": {
+          "ComplianceResourceTypes": [
+            "AWS::EC2::Volume",
+            "AWS::EC2::Instance"
+          ]
+        },
+        "Source": {
+          "Owner": "AWS",
+          "SourceIdentifier": "REQUIRED_TAGS"
+        }
+      }
+    },
+    "RestrictedCommonPorts": {
+      "Type": "AWS::Config::ConfigRule",
+      "Properties": {
+        "ConfigRuleName": "restricted-common-ports",
+        "Description": "Checks whether security groups that are in use disallow unrestricted incoming TCP traffic to the specified ports.",
+        "InputParameters": {
+          "blockedPort1": "3389",
+          "blockedPort2": "22",
+          "blockedPort3": "1433"
+        },
+        "Scope": {
+          "ComplianceResourceTypes": [
+            "AWS::EC2::SecurityGroup"
+          ]
+        },
+        "Source": {
+          "Owner": "AWS",
+          "SourceIdentifier": "RESTRICTED_INCOMING_TRAFFIC"
+        }
+      }
+    },
+    "RootAccountMFAEnabled": {
+      "Type": "AWS::Config::ConfigRule",
+      "Properties": {
+        "ConfigRuleName": "root-account-mfa-enabled",
+        "Description": "Checks whether MFA is enabled for root account",
+        "Source": {
+          "Owner": "AWS",
+          "SourceIdentifier": "ROOT_ACCOUNT_MFA_ENABLED"
+        }
+      }
+    },
+    "RDSStorageEncrypted": {
+      "Type": "AWS::Config::ConfigRule",
+      "Properties": {
+        "ConfigRuleName": "rds-storage-encrypted",
+        "Description": "Checks whether RDS storages are encrypted",
+        "Scope": {
+          "ComplianceResourceTypes": [
+            "AWS::RDS::DBInstance"
+          ]
+        },
+        "Source": {
+          "Owner": "AWS",
+          "SourceIdentifier": "RDS_STORAGE_ENCRYPTED"
+        }
+      }
+    },
+    "EncryptedVolumes": {
+      "Type": "AWS::Config::ConfigRule",
+      "Properties": {
+        "ConfigRuleName": "encrypted-volumes",
+        "Description": "Checks whether EBS volumes that are in an attached state are encrypted. Optionally, you can specify the ID of a KMS key to use to encrypt the volume.",
+        "Scope": {
+          "ComplianceResourceTypes": [
+            "AWS::EC2::Volume"
+          ]
+        },
+        "Source": {
+          "Owner": "AWS",
+          "SourceIdentifier": "ENCRYPTED_VOLUMES"
+        }
+      }
+    },
+    "CloudTrailEnabled": {
+      "Type": "AWS::Config::ConfigRule",
+      "Properties": {
+        "ConfigRuleName": "cloudtrail-enabled",
+        "Description": "Checks whether CloudTrail is enabled.",
+        "Scope": {
+          "ComplianceResourceTypes": [
+            "AWS::CloudTrail::Trail"
+          ]
+        },
+        "Source": {
+          "Owner": "AWS",
+          "SourceIdentifier": "CLOUD_TRAIL_ENABLED"
+        }
+      }
+    }
+  }
+}

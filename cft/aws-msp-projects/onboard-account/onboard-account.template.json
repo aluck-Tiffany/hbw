@@ -1,0 +1,78 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Deploy Templates Input",
+    "Parameters": {
+        "CICDBucket": {
+            "Type": "String",
+            "Default": "enabling-services-ci-cd"
+        },
+        "Customer": {
+            "Type": "String"
+        },
+        "Environment": {
+            "Type": "String"
+        },
+        "OnboardAccountVersion": {
+            "Type": "String",
+            "Default": "latest"
+        }
+    },
+    "Resources": {
+        "FunctionRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": "lambda.amazonaws.com"
+                            },
+                            "Action": "sts:AssumeRole"
+                        }
+                    ]
+                },
+                "ManagedPolicyArns": [
+                    "arn:aws:iam::aws:policy/AdministratorAccess"
+                ]
+            }
+        },
+        "OnboardAccount": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Code": {
+                    "S3Bucket": {
+                        "Ref": "CICDBucket"
+                    },
+                    "S3Key": {
+                        "Fn::Sub": "aws-msp-projects/onboard-account/${OnboardAccountVersion}/function.zip"
+                    }
+                },
+                "Handler": "index.handler",
+                "MemorySize": 128,
+                "Role": {
+                    "Fn::GetAtt": [
+                        "FunctionRole",
+                        "Arn"
+                    ]
+                },
+                "Runtime": "nodejs6.10",
+                "Timeout": 60,
+                "Environment": {
+                    "Variables": {
+                        "accountId": {
+                            "Ref": "AWS::AccountId"
+                        },
+                        "customer": {
+                            "Ref": "Customer"
+                        },
+                        "environment": {
+                            "Ref": "Environment"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

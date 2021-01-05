@@ -1,0 +1,507 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Management Tools",
+  "Parameters": {
+    "EnableCPM": {
+      "Type": "String",
+      "Default": "false"
+    },
+    "EnableCloudCheckr": {
+      "Type": "String",
+      "Default": "false"
+    },
+    "EnableTrend": {
+      "Type": "String",
+      "Default": "false"
+    },
+    "ManagementAccountId": {
+      "Type": "String",
+      "Default": ""
+    },
+    "CloudCheckrAccountId": {
+      "Type": "String",
+      "Default": ""
+    },
+    "CloudCheckrExternalId": {
+      "Type": "String",
+      "Default": ""
+    }
+  },
+  "Conditions": {
+    "isCloudCheckr": {
+      "Fn::Equals": [
+        {
+          "Ref": "EnableCloudCheckr"
+        },
+        "true"
+      ]
+    },
+    "isCPM": {
+      "Fn::Equals": [
+        {
+          "Ref": "EnableCPM"
+        },
+        "true"
+      ]
+    },
+    "isTrend": {
+      "Fn::Equals": [
+        {
+          "Ref": "EnableTrend"
+        },
+        "true"
+      ]
+    },
+    "isManagement": {
+      "Fn::Equals": [
+        {
+          "Ref": "AWS::AccountId"
+        },
+        {
+          "Ref": "ManagementAccountId"
+        }
+      ]
+    },
+    "MgmtOrService": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "ManagementAccountId"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "Service": {
+      "Fn::And": [
+        {
+          "Fn::Not": [
+            {
+              "Condition": "isManagement"
+            }
+          ]
+        },
+        {
+          "Condition": "MgmtOrService"
+        }
+      ]
+    }
+  },
+  "Resources": {
+    "CPM": {
+      "Condition": "isCPM",
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:aws:iam::",
+                      {
+                        "Ref": "ManagementAccountId"
+                      },
+                      ":root"
+                    ]
+                  ]
+                }
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "CPM-Backup",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Action": [
+                    "ec2:CopySnapshot",
+                    "ec2:CopyImage",
+                    "ec2:CreateImage",
+                    "ec2:CreateSnapshot",
+                    "ec2:CreateTags",
+                    "ec2:DeleteSnapshot",
+                    "ec2:DescribeAddresses",
+                    "ec2:DescribeAvailabilityZones",
+                    "ec2:DescribeImageAttribute",
+                    "ec2:DescribeImages",
+                    "ec2:DescribeInstanceAttribute",
+                    "ec2:DescribeInstanceStatus",
+                    "ec2:DescribeInstances",
+                    "ec2:DescribeKeyPairs",
+                    "ec2:DescribePlacementGroups",
+                    "ec2:DescribeRegions",
+                    "ec2:DescribeSecurityGroups",
+                    "ec2:DescribeSnapshotAttribute",
+                    "ec2:DescribeSnapshots",
+                    "ec2:DescribeSubnets",
+                    "ec2:DescribeTags",
+                    "ec2:DescribeVolumeAttribute",
+                    "ec2:DescribeVolumeStatus",
+                    "ec2:DescribeVolumes",
+                    "ec2:DescribeVpcs",
+                    "ec2:DeregisterImage",
+                    "ec2:ModifyImageAttribute",
+                    "ec2:ModifySnapshotAttribute",
+                    "ec2:ResetSnapshotAttribute",
+                    "kms:ListKeys",
+                    "kms:ListAliases"
+                  ],
+                  "Sid": "Stmt1374236955000",
+                  "Resource": [
+                    "*"
+                  ],
+                  "Effect": "Allow"
+                },
+                {
+                  "Action": [
+                    "rds:CreateDBSnapshot",
+                    "rds:DeleteDBSnapshot",
+                    "rds:DescribeDBInstances",
+                    "rds:DescribeDBClusters",
+                    "rds:DescribeDBParameterGroups",
+                    "rds:DescribeDBParameters",
+                    "rds:DescribeDBSnapshots",
+                    "rds:DescribeDBSubnetGroups",
+                    "rds:ListTagsForResource",
+                    "rds:CopyDBSnapshot",
+                    "redshift:DescribeClusters",
+                    "dynamodb:DeleteBackup",
+                    "dynamodb:GetItem",
+                    "dynamodb:DeleteItem",
+                    "dynamodb:PutItem",
+                    "dynamodb:UpdateItem",
+                    "dynamodb:DescribeContinuousBackups",
+                    "dynamodb:CreateBackup",
+                    "dynamodb:Query",
+                    "dynamodb:BatchWriteItem"
+                  ],
+                  "Sid": "Stmt1374237153000",
+                  "Resource": [
+                    "*"
+                  ],
+                  "Effect": "Allow"
+                }
+              ]
+            }
+          },
+          {
+            "PolicyName": "CPM-Restore",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Action": [
+                    "ec2:AllocateAddress",
+                    "ec2:AssociateAddress",
+                    "ec2:AttachVolume",
+                    "ec2:CreateImage",
+                    "ec2:CreateVolume",
+                    "ec2:DeleteVolume",
+                    "ec2:DeregisterImage",
+                    "ec2:DescribeImages",
+                    "ec2:DetachVolume",
+                    "ec2:ModifyImageAttribute",
+                    "ec2:ModifyInstanceAttribute",
+                    "ec2:ModifySnapshotAttribute",
+                    "ec2:ModifyVolumeAttribute",
+                    "ec2:RegisterImage",
+                    "ec2:RunInstances",
+                    "ec2:StartInstances",
+                    "ec2:StopInstances",
+                    "iam:PassRole",
+                    "kms:ReEncrypt*",
+                    "kms:CreateGrant"
+
+                  ],
+                  "Sid": "Stmt1374243096000",
+                  "Resource": [
+                    "*"
+                  ],
+                  "Effect": "Allow"
+                },
+                {
+                  "Action": [
+                    "rds:RestoreDBInstanceFromDBSnapshot",
+                    "rds:RestoreDBClusterFromSnapshot",
+                    "dynamodb:TagResource",
+                    "dynamodb:ListTables",
+                    "dynamodb:UntagResource",
+                    "dynamodb:RestoreTableFromBackup"
+                  ],
+                  "Sid": "Stmt1374243250000",
+                  "Resource": [
+                    "*"
+                  ],
+                  "Effect": "Allow"
+                }
+              ]
+            }
+          }
+        ],
+        "RoleName": "CPM"
+      }
+    },
+    "CloudCheckr": {
+      "Condition": "isCloudCheckr",
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:aws:iam::",
+                      {
+                        "Ref": "CloudCheckrAccountId"
+                      },
+                      ":root"
+                    ]
+                  ]
+                }
+              },
+              "Action": "sts:AssumeRole",
+              "Condition": {
+                "StringEquals": {
+                  "sts:ExternalId": {
+                    "Ref": "CloudCheckrExternalId"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "CloudCheckr",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "AdditionalPermissions",
+                  "Effect": "Allow",
+                  "Action": [
+                    "cloudformation:GetStackPolicy",
+                    "cloudhsm:Describe*",
+                    "cloudhsm:List*",
+                    "glacier:List*",
+                    "glacier:DescribeVault",
+                    "glacier:GetVaultNotifications",
+                    "glacier:DescribeJob",
+                    "glacier:GetJobOutput",
+                    "sdb:DomainMetadata",
+                    "support:*",
+                    "workspaces:DescribeWorkspaceDirectories",
+                    "workspaces:DescribeWorkspaceBundles",
+                    "workspaces:DescribeWorkspaces"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "CloudWatchLogsSpecific",
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:GetLogEvents",
+                    "logs:DescribeLogGroups",
+                    "logs:DescribeLogStreams"
+                  ],
+                  "Resource": [
+                    "arn:aws:logs:*:*:*"
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/ReadOnlyAccess"
+        ],
+        "RoleName": "CloudCheckr"
+      }
+    },
+    "Trend": {
+      "Condition": "isTrend",
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:aws:iam::",
+                      {
+                        "Ref": "ManagementAccountId"
+                      },
+                      ":root"
+                    ]
+                  ]
+                }
+              },
+              "Condition": {
+                "StringEquals": {
+                  "sts:ExternalId": "trend"
+                }
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "Trend",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "cloudconnector",
+                  "Effect": "Allow",
+                  "Action": [
+                    "ec2:DescribeImages",
+                    "ec2:DescribeInstances",
+                    "ec2:DescribeRegions",
+                    "ec2:DescribeSubnets",
+                    "ec2:DescribeTags",
+                    "ec2:DescribeVpcs",
+                    "iam:ListAccountAliases",
+                    "sts:AssumeRole"
+                  ],
+                  "Resource": [
+                    "*"
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "RoleName": "Trend"
+      }
+    },
+    "Management": {
+      "Condition": "MgmtOrService",
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": {
+                  "Fn::Sub": "arn:aws:iam::${ManagementAccountId}:root"
+                }
+              },
+              "Action": "sts:AssumeRole",
+              "Condition": {
+                "StringEquals": {
+                  "sts:ExternalId": "Datacom"
+                }
+              }
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/AdministratorAccess"
+        ],
+        "RoleName": "DatacomIntegration"
+      }
+    },
+    "EC2Rule": {
+      "Condition": "Service",
+      "Type": "AWS::Events::Rule",
+      "Properties": {
+        "Description": "Event Bus",
+        "EventPattern": {
+          "source": [
+            "aws.ec2"
+          ],
+          "detail-type": [
+            "AWS API Call via CloudTrail"
+          ],
+          "detail": {
+            "eventSource": [
+              "ec2.amazonaws.com"
+            ],
+            "eventName": [
+              "RunInstances",
+              "StartInstances",
+              "CreateImage",
+              "CopyImage",
+              "CreateSnapshot",
+              "CopySnapshot",
+              "CreateVolume",
+              "AttachVolume",
+              "StopInstances",
+              "TerminateInstances"
+            ]
+          }
+        },
+        "Targets": [
+          {
+            "Arn": {
+              "Fn::Sub": "arn:aws:events:ap-southeast-2:${ManagementAccountId}:event-bus/default"
+            },
+            "Id": "bus"
+          }
+        ]
+      }
+    },
+    "HealthRule": {
+      "Condition": "Service",
+      "Type": "AWS::Events::Rule",
+      "Properties": {
+        "Description": "Event Bus",
+        "EventPattern": {
+          "source": [
+            "aws.health"
+          ],
+          "detail-type": [
+            "AWS Health Event"
+          ],
+          "detail": {
+            "service": [
+              "EC2"
+            ],
+            "eventTypeCategory": [
+              "scheduledChange"
+            ]
+          }
+        },
+        "Targets": [
+          {
+            "Arn": {
+              "Fn::Sub": "arn:aws:events:ap-southeast-2:${ManagementAccountId}:event-bus/default"
+            },
+            "Id": "health-bus"
+          }
+        ]
+      }
+    },
+    "Topic": {
+      "Condition": "MgmtOrService",
+      "Type": "AWS::SNS::Topic",
+      "Properties": {
+        "TopicName": "DatacomImages"
+      }
+    }
+  }
+}

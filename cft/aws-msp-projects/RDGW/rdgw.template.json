@@ -1,0 +1,725 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Install RD Gateway in existing VPC with optional Customer Name",
+    "Parameters": {
+        "MicrosoftADPW": {
+            "AllowedPattern": "(?=^.{6,255}$)((?=.*\\d)(?=.*[A-Z])(?=.*[a-z])|(?=.*\\d)(?=.*[^A-Za-z0-9])(?=.*[a-z])|(?=.*[^A-Za-z0-9])(?=.*[A-Z])(?=.*[a-z])|(?=.*\\d)(?=.*[A-Z])(?=.*[^A-Za-z0-9]))^.*",
+            "Description": "Password for the domain admin user. Must be at least 8 characters containing letters, numbers and symbols",
+            "MaxLength": "32",
+            "MinLength": "8",
+            "NoEcho": "true",
+            "Type": "String"
+        },
+        "DomainAdminUser": {
+            "AllowedPattern": "[a-zA-Z0-9]*",
+            "Default": "Admin",
+            "Description": "User name for the Domain Administrator. This is separate from the default \"Administrator\" account",
+            "MaxLength": "25",
+            "MinLength": "5",
+            "Type": "String"
+        },
+        "RDGWInstanceType": {
+            "Description": "Amazon EC2 instance type for the Remote Desktop Gateway instances",
+            "Type": "String",
+            "Default": "t2.medium",
+            "AllowedValues": [
+                "t2.small",
+                "t2.medium",
+                "t2.large",
+                "m3.large",
+                "m3.xlarge",
+                "m3.2xlarge",
+                "m4.large",
+                "m4.xlarge",
+                "m4.2xlarge",
+                "m4.4xlarge",
+                "m5.large",
+                "m5.xlarge",
+                "m5.2xlarge",
+                "m5.4xlarge"
+            ]
+        },
+        "AMIID": {
+            "Description": "Specify Windows 2016 AMI ID to use for Instances",
+            "Type": "String"
+        },
+        "SSLCertUrl": {
+            "Type": "String",
+            "Description": "Custom SSL certificate to use with Cloudfront distribution."
+        },
+        "SSLCertPass": {
+            "Type": "String",
+            "NoEcho": "true"
+        },
+        "RDGWAlias": {
+            "Type": "String",
+            "Default": "gateway"
+        },
+        "CostCentreTag": {
+            "Type": "String",
+            "Default": "management"
+        },
+        "BaseURL": {
+            "Description": "CloudFront Distribution Alternate Domain Name without ending period",
+            "Type": "String"
+        },
+        "Customer": {
+            "Type": "String",
+            "Description": "Optional: Customer Name - This is only to be used if more than one customer AD is deployed into the account",
+            "Default": ""
+        }
+    },
+    "Conditions": {
+        "HasCustomer": {
+            "Fn::Not": [{
+                "Fn::Equals": [{
+                        "Ref": "Customer"
+                    },
+                    ""
+                ]
+            }]
+        }
+    },
+    "Resources": {
+        "RDGW": {
+            "Type": "AWS::EC2::Instance",
+            "Metadata": {
+                "AWS::CloudFormation::Init": {
+                    "configSets": {
+                        "config": [
+                            "setup",
+                            "join",
+                            "installRDS",
+                            "finalize"
+                        ]
+                    },
+                    "setup": {
+                        "files": {
+                            "c:\\cfn\\cfn-hup.conf": {
+                                "content": {
+                                    "Fn::Join": [
+                                        "", [
+                                            "[main]\n",
+                                            "stack=",
+                                            {
+                                                "Ref": "AWS::StackName"
+                                            },
+                                            "\n",
+                                            "region=",
+                                            {
+                                                "Ref": "AWS::Region"
+                                            },
+                                            "\n"
+                                        ]
+                                    ]
+                                }
+                            },
+                            "c:\\cfn\\hooks.d\\cfn-auto-reloader.conf": {
+                                "content": {
+                                    "Fn::Join": [
+                                        "", [
+                                            "[cfn-auto-reloader-hook]\n",
+                                            "triggers=post.update\n",
+                                            "path=Resources.RDGW.Metadata.AWS::CloudFormation::Init\n",
+                                            "action=cfn-init.exe -v -c config -s ",
+                                            {
+                                                "Ref": "AWS::StackId"
+                                            },
+                                            " -r RDGW",
+                                            " --region ",
+                                            {
+                                                "Ref": "AWS::Region"
+                                            },
+                                            "\n"
+                                        ]
+                                    ]
+                                }
+                            },
+                            "C:\\cfn\\scripts\\Unzip-Archive.ps1": {
+                                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/Unzip-Archive.ps1"
+                            },
+                            "C:\\cfn\\modules\\AWSQuickStart.zip": {
+                                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/AWSQuickStart.zip"
+                            },
+                            "C:\\cfn\\scripts\\Join-Domain.ps1": {
+                                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/Join-Domain.ps1"
+                            },
+                            "C:\\cfn\\scripts\\Install-SSLCert.ps1": {
+                                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/Install-SSLCert.ps1"
+                            },
+                            "c:\\cfn\\scripts\\Initialize-RDGW.ps1": {
+                                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/Initialize-RDGW.ps1"
+                            }
+                        },
+                        "services": {
+                            "windows": {
+                                "cfn-hup": {
+                                    "enabled": "true",
+                                    "ensureRunning": "true",
+                                    "files": [
+                                        "c:\\cfn\\cfn-hup.conf",
+                                        "c:\\cfn\\hooks.d\\cfn-auto-reloader.conf"
+                                    ]
+                                }
+                            }
+                        },
+                        "commands": {
+                            "a-set-execution-policy": {
+                                "command": "powershell.exe -Command \"Set-ExecutionPolicy RemoteSigned -Force\"",
+                                "waitAfterCompletion": "0"
+                            },
+                            "b-unpack-quickstart-module": {
+                                "command": "powershell.exe -Command C:\\cfn\\scripts\\Unzip-Archive.ps1 -Source C:\\cfn\\modules\\AWSQuickStart.zip -Destination C:\\Windows\\system32\\WindowsPowerShell\\v1.0\\Modules\\",
+                                "waitAfterCompletion": "0"
+                            },
+                            "c-init-quickstart-module": {
+                                "command": {
+                                    "Fn::Join": [
+                                        "", [
+                                            "powershell.exe -Command \"",
+                                            "New-AWSQuickStartResourceSignal -Stack '",
+                                            {
+                                                "Ref": "AWS::StackName"
+                                            },
+                                            "' -Resource 'RDGW' -Region '",
+                                            {
+                                                "Ref": "AWS::Region"
+                                            },
+                                            "'\""
+                                        ]
+                                    ]
+                                },
+                                "waitAfterCompletion": "0"
+                            }
+                        }
+                    },
+                    "join": {
+                        "commands": {
+                            "a-rename-computer": {
+                                "command": "powershell.exe -Command \"Rename-Computer -NewName 'gateway' -Restart\"",
+                                "waitAfterCompletion": "forever"
+                            },
+                            "b-set-dns-servers": {
+                                "command": {
+                                    "Fn::Join": [
+                                        "", [
+                                            "powershell.exe -Command ",
+                                            "\"",
+                                            "Get-NetAdapter | Set-DnsClientServerAddress -ServerAddresses ",
+                                            {
+                                                "Fn::ImportValue": {
+                                                    "Fn::Sub": "${Customer}DnsIpAddresses"
+                                                }
+                                            },
+                                            "\""
+                                        ]
+                                    ]
+                                },
+                                "waitAfterCompletion": "30"
+                            },
+                            "c-join-domain": {
+                                "command": {
+                                    "Fn::Join": [
+                                        "", [
+                                            "powershell.exe -Command \"C:\\cfn\\scripts\\Join-Domain.ps1 -DomainName '",
+                                            {
+                                                "Fn::ImportValue": {
+                                                    "Fn::Sub": "${Customer}DomainDNSName"
+                                                }
+                                            },
+                                            "' -UserName '",
+                                            {
+                                                "Fn::ImportValue": {
+                                                    "Fn::Sub": "${Customer}DomainNetBIOSName"
+                                                }
+                                            },
+                                            "\\",
+                                            {
+                                                "Ref": "DomainAdminUser"
+                                            },
+                                            "' -Password '",
+                                            {
+                                                "Ref": "MicrosoftADPW"
+                                            },
+                                            "'\""
+                                        ]
+                                    ]
+                                },
+                                "waitAfterCompletion": "forever"
+                            }
+                        }
+                    },
+                    "installRDS": {
+                        "commands": {
+                            "a-install-rds": {
+                                "command": {
+                                    "Fn::Join": [
+                                        "", [
+                                            "powershell.exe -Command \"Install-WindowsFeature RDS-Gateway,RSAT-RDS-Gateway\""
+                                        ]
+                                    ]
+                                },
+                                "waitAfterCompletion": "0"
+                            },
+                            "b-install-ssl-cert": {
+                                "command": {
+                                    "Fn::Join": [
+                                        "", [
+                                            "powershell.exe -Command \"C:\\cfn\\scripts\\Install-SSLCert.ps1 -CertURL '",
+                                            {
+                                                "Ref": "SSLCertUrl"
+                                            },
+                                            "' -CertPassword '",
+                                            {
+                                                "Ref": "SSLCertPass"
+                                            },
+                                            "'\""
+                                        ]
+                                    ]
+                                },
+                                "waitAfterCompletion": "15"
+                            },
+                            "c-configure-rdgw": {
+                                "command": {
+                                    "Fn::Join": [
+                                        "", [
+                                            "powershell.exe -ExecutionPolicy RemoteSigned ",
+                                            "C:\\cfn\\scripts\\Initialize-RDGW.ps1 -ServerFQDN $($env:COMPUTERNAME + '.",
+                                            {
+                                                "Fn::ImportValue": {
+                                                    "Fn::Sub": "${Customer}DomainDNSName"
+                                                }
+                                            },
+                                            "') -DomainNetBiosName ",
+                                            {
+                                                "Fn::ImportValue": {
+                                                    "Fn::Sub": "${Customer}DomainNetBIOSName"
+                                                }
+                                            },
+                                            " -GroupName 'Domain Users'"
+                                        ]
+                                    ]
+                                },
+                                "waitAfterCompletion": "0"
+                            }
+                        }
+                    },
+                    "finalize": {
+                        "commands": {
+                            "1-signal-success": {
+                                "command": "powershell.exe -Command \"Write-AWSQuickStartStatus\"",
+                                "waitAfterCompletion": "0"
+                            }
+                        }
+                    }
+                }
+            },
+            "Properties": {
+                "ImageId": {
+                    "Ref": "AMIID"
+                },
+                "SubnetId": {
+                    "Fn::ImportValue": "RestrictedASubnet"
+                },
+                "SecurityGroupIds": [{
+                        "Ref": "RemoteDesktopGatewaySG"
+                    },
+                    {
+                        "Ref": "RDGWSecurityGroup"
+                    },
+                    {
+                        "Fn::ImportValue": {
+                            "Fn::Sub": "${Customer}ManagementSecurityGroup"
+                        }
+                    },
+                    {
+                        "Fn::ImportValue": {
+                            "Fn::Sub": "${Customer}JumpSecurityGroup"
+                        }
+                    }
+                ],
+                "InstanceType": {
+                    "Ref": "RDGWInstanceType"
+                },
+                "BlockDeviceMappings": [{
+                    "DeviceName": "/dev/sda1",
+                    "Ebs": {
+                        "VolumeSize": "50",
+                        "VolumeType": "gp2"
+                    }
+                }],
+                "KeyName": {
+                    "Ref": "AWS::AccountId"
+                },
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": [
+                            "", [
+                                "<script>\n",
+                                "cfn-init.exe -v -c config -s ",
+                                {
+                                    "Ref": "AWS::StackId"
+                                },
+                                " -r RDGW",
+                                " --region ",
+                                {
+                                    "Ref": "AWS::Region"
+                                },
+                                "\n",
+                                "</script>\n"
+                            ]
+                        ]
+                    }
+                },
+                "Tags": [{
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::If": [
+                              "HasCustomer",
+                              {
+                                "Fn::Sub": "${Customer}-RDGW"
+                              },
+                              "RDGW"
+                            ]
+                          }
+                    },
+                    {
+                        "Key": "CostCentre",
+                        "Value": {
+                            "Ref": "CostCentreTag"
+                        }
+                    }
+                ]
+            }
+        },
+        "RDGWLicense": {
+            "Type": "AWS::EC2::Instance",
+            "Metadata": {
+                "AWS::CloudFormation::Init": {
+                    "configSets": {
+                        "config": [
+                            "setup",
+                            "join",
+                            "finalize"
+                        ]
+                    },
+                    "setup": {
+                        "files": {
+                            "c:\\cfn\\cfn-hup.conf": {
+                                "content": {
+                                    "Fn::Join": [
+                                        "", [
+                                            "[main]\n",
+                                            "stack=",
+                                            {
+                                                "Ref": "AWS::StackName"
+                                            },
+                                            "\n",
+                                            "region=",
+                                            {
+                                                "Ref": "AWS::Region"
+                                            },
+                                            "\n"
+                                        ]
+                                    ]
+                                }
+                            },
+                            "c:\\cfn\\hooks.d\\cfn-auto-reloader.conf": {
+                                "content": {
+                                    "Fn::Join": [
+                                        "", [
+                                            "[cfn-auto-reloader-hook]\n",
+                                            "triggers=post.update\n",
+                                            "path=Resources.RDGWLicense.Metadata.AWS::CloudFormation::Init\n",
+                                            "action=cfn-init.exe -v -c config -s ",
+                                            {
+                                                "Ref": "AWS::StackId"
+                                            },
+                                            " -r RDGWLicense",
+                                            " --region ",
+                                            {
+                                                "Ref": "AWS::Region"
+                                            },
+                                            "\n"
+                                        ]
+                                    ]
+                                }
+                            },
+                            "C:\\cfn\\scripts\\Unzip-Archive.ps1": {
+                                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/Unzip-Archive.ps1"
+                            },
+                            "C:\\cfn\\modules\\AWSQuickStart.zip": {
+                                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/AWSQuickStart.zip"
+                            },
+                            "C:\\cfn\\scripts\\Join-Domain.ps1": {
+                                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/Join-Domain.ps1"
+                            }
+                        },
+                        "services": {
+                            "windows": {
+                                "cfn-hup": {
+                                    "enabled": "true",
+                                    "ensureRunning": "true",
+                                    "files": [
+                                        "c:\\cfn\\cfn-hup.conf",
+                                        "c:\\cfn\\hooks.d\\cfn-auto-reloader.conf"
+                                    ]
+                                }
+                            }
+                        },
+                        "commands": {
+                            "a-set-execution-policy": {
+                                "command": "powershell.exe -Command \"Set-ExecutionPolicy RemoteSigned -Force\"",
+                                "waitAfterCompletion": "0"
+                            },
+                            "b-unpack-quickstart-module": {
+                                "command": "powershell.exe -Command C:\\cfn\\scripts\\Unzip-Archive.ps1 -Source C:\\cfn\\modules\\AWSQuickStart.zip -Destination C:\\Windows\\system32\\WindowsPowerShell\\v1.0\\Modules\\",
+                                "waitAfterCompletion": "0"
+                            },
+                            "c-init-quickstart-module": {
+                                "command": {
+                                    "Fn::Join": [
+                                        "", [
+                                            "powershell.exe -Command \"",
+                                            "New-AWSQuickStartResourceSignal -Stack '",
+                                            {
+                                                "Ref": "AWS::StackName"
+                                            },
+                                            "' -Resource 'RDGWLicense' -Region '",
+                                            {
+                                                "Ref": "AWS::Region"
+                                            },
+                                            "'\""
+                                        ]
+                                    ]
+                                },
+                                "waitAfterCompletion": "0"
+                            }
+                        }
+                    },
+                    "join": {
+                        "commands": {
+                            "a-set-dns-servers": {
+                                "command": {
+                                    "Fn::Join": [
+                                        "", [
+                                            "powershell.exe -Command ",
+                                            "\"",
+                                            "Get-NetAdapter | Set-DnsClientServerAddress -ServerAddresses ",
+                                            {
+                                                "Fn::ImportValue": {
+                                                    "Fn::Sub": "${Customer}DnsIpAddresses"
+                                                }
+                                            },
+                                            "\""
+                                        ]
+                                    ]
+                                },
+                                "waitAfterCompletion": "30"
+                            },
+                            "b-join-domain": {
+                                "command": {
+                                    "Fn::Join": [
+                                        "", [
+                                            "powershell.exe -Command \"C:\\cfn\\scripts\\Join-Domain.ps1 -DomainName '",
+                                            {
+                                                "Fn::ImportValue": {
+                                                    "Fn::Sub": "${Customer}DomainDNSName"
+                                                }
+                                            },
+                                            "' -UserName '",
+                                            {
+                                                "Fn::ImportValue": {
+                                                    "Fn::Sub": "${Customer}DomainNetBIOSName"
+                                                }
+                                            },
+                                            "\\",
+                                            {
+                                                "Ref": "DomainAdminUser"
+                                            },
+                                            "' -Password '",
+                                            {
+                                                "Ref": "MicrosoftADPW"
+                                            },
+                                            "'\""
+                                        ]
+                                    ]
+                                },
+                                "waitAfterCompletion": "forever"
+                            }
+                        }
+                    },
+                    "finalize": {
+                        "commands": {
+                            "1-signal-success": {
+                                "command": "powershell.exe -Command \"Write-AWSQuickStartStatus\"",
+                                "waitAfterCompletion": "0"
+                            }
+                        }
+                    }
+                }
+            },
+            "Properties": {
+                "ImageId": {
+                    "Ref": "AMIID"
+                },
+                "SubnetId": {
+                    "Fn::ImportValue": "RestrictedASubnet"
+                },
+                "SecurityGroupIds": [{
+                        "Ref": "RemoteDesktopGatewaySG"
+                    },
+                    {
+                        "Ref": "RDGWSecurityGroup"
+                    },
+                    {
+                        "Fn::ImportValue": {
+                            "Fn::Sub": "${Customer}ManagementSecurityGroup"
+                        }
+                    },
+                    {
+                        "Fn::ImportValue": {
+                            "Fn::Sub": "${Customer}JumpSecurityGroup"
+                        }
+                    }
+                ],
+                "InstanceType": {
+                    "Ref": "RDGWInstanceType"
+                },
+                "BlockDeviceMappings": [{
+                    "DeviceName": "/dev/sda1",
+                    "Ebs": {
+                        "VolumeSize": "50",
+                        "VolumeType": "gp2"
+                    }
+                }],
+                "KeyName": {
+                    "Ref": "AWS::AccountId"
+                },
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": [
+                            "", [
+                                "<script>\n",
+                                "cfn-init.exe -v -c config -s ",
+                                {
+                                    "Ref": "AWS::StackId"
+                                },
+                                " -r RDGWLicense",
+                                " --region ",
+                                {
+                                    "Ref": "AWS::Region"
+                                },
+                                "\n",
+                                "</script>\n"
+                            ]
+                        ]
+                    }
+                },
+                "Tags": [{
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::If": [
+                              "HasCustomer",
+                              {
+                                "Fn::Sub": "${Customer}-RDGW-License"
+                              },
+                              "RDGW-License"
+                            ]
+                          }
+                    },
+                    {
+                        "Key": "CostCentre",
+                        "Value": {
+                            "Ref": "CostCentreTag"
+                        }
+                    }
+                ]
+            }
+        },
+        "RemoteDesktopGatewaySG": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "GroupDescription": "Enable RDP access from the Internet",
+                "VpcId": {
+                    "Fn::ImportValue": "VPC"
+                },
+                "SecurityGroupIngress": [{
+                        "IpProtocol": "tcp",
+                        "FromPort": "3389",
+                        "ToPort": "3389",
+                        "CidrIp": {
+                            "Fn::ImportValue": "VPCCidrBlock"
+                        }
+                    },
+                    {
+                        "IpProtocol": "icmp",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": {
+                            "Fn::ImportValue": "VPCCidrBlock"
+                        }
+                    }
+                ]
+            }
+        },
+        "RDGWSecurityGroup": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "GroupDescription": "RDG Gateway ELB Security Group",
+                "VpcId": {
+                    "Fn::ImportValue": "VPC"
+                },
+                "SecurityGroupIngress": [{
+                    "CidrIp": "0.0.0.0/0",
+                    "IpProtocol": "tcp",
+                    "FromPort": "443",
+                    "ToPort": "443"
+                }],
+                "SecurityGroupEgress": [{
+                    "CidrIp": "0.0.0.0/0",
+                    "IpProtocol": "tcp",
+                    "FromPort": "443",
+                    "ToPort": "443"
+                }]
+            }
+        },
+        "RDGWRoute53Record": {
+            "Type": "AWS::Route53::RecordSet",
+            "Properties": {
+                "HostedZoneId": {
+                    "Fn::ImportValue": {
+                        "Fn::Sub":"${Customer}Route53HostedZone"
+                    }
+                },
+                "Comment": "RDGW private Route 53 records",
+                "Name": {
+                    "Fn::Join": [
+                        "", [{
+                                "Ref": "RDGWAlias"
+                            },
+                            ".",
+                            {
+                                "Ref": "BaseURL"
+                            },
+                            "."
+                        ]
+                    ]
+                },
+                "Type": "A",
+                "TTL": "900",
+                "ResourceRecords": [{
+                    "Fn::GetAtt": ["RDGW", "PrivateIp"]
+                }]
+            }
+        }
+    },
+    "Outputs": {
+        "RemoteDesktopGatewaySGID": {
+            "Value": {
+                "Ref": "RemoteDesktopGatewaySG"
+            },
+            "Description": "Remote Desktop Gateway Security Group ID"
+        }
+    }
+}

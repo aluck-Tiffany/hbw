@@ -1,0 +1,12 @@
+image: python:3.5.1
+
+clone:
+  depth: full
+
+pipelines:
+  default:
+    - step:
+        script:
+          - git log $(git branch | grep \* | cut -d ' ' -f2) --not origin/master --oneline | while read line; do message=$(echo $line | awk '{print $2}') ; if [[ $message == HCS-* || $message == Merged* ]]; then echo "Bonza commit message - $message"; else echo "*** Strewth! This commit is missing a JIRA ID - $message ***" && exit 1; fi;  done;
+          - pip install awscli
+          - find . -name '*.json' | while read line; do aws cloudformation validate-template --template-body file://$line; done;

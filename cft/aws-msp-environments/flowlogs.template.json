@@ -1,0 +1,208 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Flow Logs",
+  "Parameters": {
+    "URL": {
+      "Type": "String"
+    },
+    "VPCIdentifier": {
+      "Type": "String",
+      "Description": "Specify the VPC Identifier - This is only to be used if more than one VPC is being deployed into the account",
+      "Default": ""
+    }
+  },
+  "Conditions": {
+    "HasURL": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "URL"
+            },
+            ""
+          ]
+        }
+      ]
+    }
+  },
+  "Resources": {
+    "LogGroup": {
+      "Type": "AWS::Logs::LogGroup",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Sub": "/aws/vpc${VPCIdentifier}"
+        }
+      }
+    },
+    "FlowLog": {
+      "Type": "AWS::EC2::FlowLog",
+      "Properties": {
+        "DeliverLogsPermissionArn": {
+          "Fn::GetAtt": [
+            "FlowRole",
+            "Arn"
+          ]
+        },
+        "LogGroupName": {
+          "Fn::Sub": "/aws/vpc${VPCIdentifier}"
+        },
+        "ResourceId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "VPC${VPCIdentifier}"
+          }
+        },
+        "ResourceType": "VPC",
+        "TrafficType": "ALL"
+      }
+    },
+    "FlowRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "vpc-flow-logs.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": {
+              "Fn::Sub": "flowlogs${VPCIdentifier}"
+            },
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Action": [
+                    "logs:CreateLogGroup",
+                    "logs:CreateLogStream",
+                    "logs:DescribeLogGroups",
+                    "logs:DescribeLogStreams",
+                    "logs:PutLogEvents"
+                  ],
+                  "Effect": "Allow",
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ],
+        "RoleName": {
+          "Fn::Sub": "flowlogs${VPCIdentifier}"
+        }
+      }
+    },
+    "LambdaRole": {
+      "Condition": "HasURL",
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+        ],
+        "RoleName": {
+          "Fn::Sub": "lambdaflowlogs${VPCIdentifier}"
+        }
+      }
+    },
+    "Permission": {
+      "Condition": "HasURL",
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "Action": "lambda:InvokeFunction",
+        "FunctionName": {
+          "Ref": "Function"
+        },
+        "Principal": "logs.ap-southeast-2.amazonaws.com",
+        "SourceArn": {
+          "Fn::Join": [
+            "",
+            [
+              "arn:aws:logs:",
+              {
+                "Ref": "AWS::Region"
+              },
+              ":",
+              {
+                "Ref": "AWS::AccountId"
+              },
+              {
+                "Fn::Sub": ":log-group:/aws/vpc${VPCIdentifier}"
+              },
+              ":*"
+            ]
+          ]
+        }
+      }
+    },
+    "Function": {
+      "Condition": "HasURL",
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "FunctionName": {
+          "Fn::Sub": "flowlogs${VPCIdentifier}"
+        },
+        "Code": {
+          "ZipFile": {
+            "Fn::Join": [
+              "",
+              [
+                "'use strict'; const url = require('url'); let sumo = url.parse('",
+                {
+                  "Ref": "URL"
+                },
+                "'); const options = {'method': 'POST', 'hostname': sumo.hostname, 'path': sumo.path}; const https = require('https'); const zlib = require('zlib'); exports.handler = (event, context, callback) => { let unzip = function (event) { return new Promise(resolve => { let data = new Buffer(event.awslogs.data, 'base64'); zlib.gunzip(data, (error, result) => { if (error) { callback(error); } else { result = JSON.parse(result.toString('utf8')); for (let logEvent of result['logEvents']) { logEvent.logStream = result.logStream; logEvent.logGroup = result.logGroup; } resolve(result['logEvents']); } }) }) }; let post = function (logEvents) { return new Promise(resolve => { let request = https.request(options, (response) => { if (response.statusCode === 200) { resolve() } else { callback(response.statusCode); } }); request.on('error', (error) => { callback(error) }); for (let logEvent of logEvents) { request.write(JSON.stringify(logEvent) + '\\n'); } request.end(); }) }; unzip(event).then((logEvents) => { post(logEvents).then(() => { callback(); }) }); };"
+              ]
+            ]
+          }
+        },
+        "Handler": "index.handler",
+        "Role": {
+          "Fn::GetAtt": [
+            "LambdaRole",
+            "Arn"
+          ]
+        },
+        "Runtime": "nodejs4.3"
+      }
+    },
+    "SubscriptionFilter": {
+      "Condition": "HasURL",
+      "DependsOn": [
+        "FlowLog",
+        "LogGroup",
+        "Permission"
+      ],
+      "Type": "AWS::Logs::SubscriptionFilter",
+      "Properties": {
+        "DestinationArn": {
+          "Fn::GetAtt": [
+            "Function",
+            "Arn"
+          ]
+        },
+        "FilterPattern": "",
+        "LogGroupName": {
+          "Fn::Sub": "/aws/vpc${VPCIdentifier}"
+        }
+      }
+    }
+  }
+}

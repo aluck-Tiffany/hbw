@@ -1,0 +1,592 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "WSUS Automation",
+  "Parameters": {
+    "WSUSEndpoint": {
+      "Type": "String"
+    },
+    "CostCentreTag": {
+      "Type": "String",
+      "Default": "management"
+    },
+    "MicrosoftADPW": {
+      "AllowedPattern": "(?=^.{6,255}$)((?=.*\\d)(?=.*[A-Z])(?=.*[a-z])|(?=.*\\d)(?=.*[^A-Za-z0-9])(?=.*[a-z])|(?=.*[^A-Za-z0-9])(?=.*[A-Z])(?=.*[a-z])|(?=.*\\d)(?=.*[A-Z])(?=.*[^A-Za-z0-9]))^.*",
+      "Description": "Password for the domain admin user. Must be at least 8 characters containing letters, numbers and symbols",
+      "MaxLength": "32",
+      "MinLength": "8",
+      "NoEcho": "true",
+      "Type": "String"
+    },
+    "DomainAdminUser": {
+      "AllowedPattern": "[a-zA-Z0-9]*",
+      "Default": "Admin",
+      "Description": "User name for the Domain Administrator. This is separate from the default \"Administrator\" account",
+      "MaxLength": "25",
+      "MinLength": "5",
+      "Type": "String"
+    },
+    "InstanceType": {
+      "Description": "Amazon EC2 instance type for the Remote Desktop Gateway instances",
+      "Type": "String",
+      "Default": "t2.medium",
+      "AllowedValues": [
+        "t2.small",
+        "t2.medium",
+        "t2.large",
+        "m3.large",
+        "m3.xlarge",
+        "m3.2xlarge",
+        "m4.large",
+        "m4.xlarge",
+        "m4.2xlarge",
+        "m4.4xlarge",
+        "m5.large",
+        "m5.xlarge",
+        "m5.2xlarge",
+        "m5.4xlarge"
+      ]
+    },
+    "AMIID": {
+      "Description": "Specify Windows 2016 AMI ID to use for Instances",
+      "Type": "String"
+    },
+    "BaseURL": {
+      "Description": "CloudFront Distribution Alternate Domain Name without ending period",
+      "Type": "String"
+    },
+    "DeployInstance": {
+      "Type": "String",
+      "Default": "true",
+      "AllowedValues": [
+        "true",
+        "false"
+      ],
+      "Description": "Used for retro fitting. Only set to false if updating an existing non 1.6 account with this stack."
+    },
+    "WSUSIP": {
+      "Description": "IP Address of existing WSUS Server. Only specifye if updating an existing non 1.6 account with this stack.",
+      "Type": "String"
+    }
+  },
+  "Conditions": {
+    "DeployInstance": {
+      "Fn::Equals": [
+        {
+          "Ref": "DeployInstance"
+        },
+        "true"
+      ]
+    },
+    "WSUSIPCond": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "WSUSIP"
+            },
+            ""
+          ]
+        }
+      ]
+    }
+  },
+  "Resources": {
+    "WSUSSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Security group for WSUS server",
+        "SecurityGroupEgress": [
+          {
+            "IpProtocol": "-1",
+            "CidrIp": "0.0.0.0/0"
+          }
+        ],
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "-1",
+            "CidrIp": "127.0.0.1/32"
+          },
+          {
+            "Description": "Allow WSUS default inbound port",
+            "IpProtocol": "tcp",
+            "FromPort": "80",
+            "ToPort": "80",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "Description": "Allow WSUS custom inbound ports",
+            "IpProtocol": "tcp",
+            "FromPort": "8530",
+            "ToPort": "8531",
+            "CidrIp": "0.0.0.0/0"
+          }
+        ],
+        "VpcId": {
+          "Fn::ImportValue": "VPC"
+        }
+      }
+    },
+    "Topic": {
+      "Type": "AWS::SNS::Topic",
+      "Properties": {
+        "TopicName": {
+          "Fn::Join": [
+            "",
+            [
+              {
+                "Ref": "AWS::AccountId"
+              },
+              "-WSUS"
+            ]
+          ]
+        },
+        "Subscription": [
+          {
+            "Endpoint": {
+              "Ref": "WSUSEndpoint"
+            },
+            "Protocol": "email"
+          }
+        ]
+      }
+    },
+    "IamRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ec2.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "WSUS-SNS",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Action": [
+                    "sns:Publish"
+                  ],
+                  "Resource": [
+                    "*"
+                  ],
+                  "Effect": "Allow"
+                }
+              ]
+            }
+          }
+        ],
+        "RoleName": "WSUS"
+      }
+    },
+    "WSUSProfile": {
+      "Type": "AWS::IAM::InstanceProfile",
+      "Properties": {
+        "Path": "/",
+        "Roles": [
+          {
+            "Ref": "IamRole"
+          }
+        ]
+      }
+    },
+    "Volume": {
+      "Type": "AWS::EC2::Volume",
+      "Condition": "DeployInstance",
+      "Properties": {
+        "Size": "500",
+        "Encrypted": "true",
+        "AvailabilityZone": "ap-southeast-2a",
+        "KmsKeyId": {
+          "Fn::ImportValue": "KMSKeyARN"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "WSUS DataDisk"
+          },
+          {
+            "Key": "CostCentre",
+            "Value": {
+              "Ref": "CostCentreTag"
+            }
+          }
+        ]
+      }
+    },
+    "WSUS": {
+      "Type": "AWS::EC2::Instance",
+      "Condition": "DeployInstance",
+      "Metadata": {
+        "AWS::CloudFormation::Init": {
+          "configSets": {
+            "config": [
+              "setup",
+              "join",
+              "install",
+              "finalize"
+            ]
+          },
+          "setup": {
+            "files": {
+              "c:\\cfn\\cfn-hup.conf": {
+                "content": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "[main]\n",
+                      "stack=",
+                      {
+                        "Ref": "AWS::StackName"
+                      },
+                      "\n",
+                      "region=",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "c:\\cfn\\hooks.d\\cfn-auto-reloader.conf": {
+                "content": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "[cfn-auto-reloader-hook]\n",
+                      "triggers=post.update\n",
+                      "path=Resources.WSUS.Metadata.AWS::CloudFormation::Init\n",
+                      "action=cfn-init.exe -v -c config -s ",
+                      {
+                        "Ref": "AWS::StackId"
+                      },
+                      " -r WSUS",
+                      " --region ",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      "\n"
+                    ]
+                  ]
+                }
+              },
+              "C:\\cfn\\scripts\\Unzip-Archive.ps1": {
+                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/Unzip-Archive.ps1"
+              },
+              "C:\\cfn\\modules\\AWSQuickStart.zip": {
+                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/AWSQuickStart.zip"
+              },
+              "C:\\cfn\\scripts\\Join-Domain.ps1": {
+                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/Join-Domain.ps1"
+              },
+              "C:\\Users\\Administrator\\Desktop\\autowsuspatchingdev.ps1": {
+                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/autowsuspatchingdev.ps1"
+              },
+              "C:\\Users\\Administrator\\Desktop\\autowsuspatchingprod.ps1": {
+                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/autowsuspatchingprod.ps1"
+              },
+              "C:\\cfn\\scripts\\Start-wsus-sync.ps1": {
+                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/Start-wsus-sync.ps1"
+              }
+            },
+            "services": {
+              "windows": {
+                "cfn-hup": {
+                  "enabled": "true",
+                  "ensureRunning": "true",
+                  "files": [
+                    "c:\\cfn\\cfn-hup.conf",
+                    "c:\\cfn\\hooks.d\\cfn-auto-reloader.conf"
+                  ]
+                }
+              }
+            },
+            "commands": {
+              "a-set-execution-policy": {
+                "command": "powershell.exe -Command \"Set-ExecutionPolicy RemoteSigned -Force\"",
+                "waitAfterCompletion": "0"
+              },
+              "b-unpack-quickstart-module": {
+                "command": "powershell.exe -Command C:\\cfn\\scripts\\Unzip-Archive.ps1 -Source C:\\cfn\\modules\\AWSQuickStart.zip -Destination C:\\Windows\\system32\\WindowsPowerShell\\v1.0\\Modules\\",
+                "waitAfterCompletion": "0"
+              },
+              "c-init-quickstart-module": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "powershell.exe -Command \"",
+                      "New-AWSQuickStartResourceSignal -Stack '",
+                      {
+                        "Ref": "AWS::StackName"
+                      },
+                      "' -Resource 'WSUS' -Region '",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      "'\""
+                    ]
+                  ]
+                },
+                "waitAfterCompletion": "0"
+              }
+            }
+          },
+          "join": {
+            "commands": {
+              "a-rename-computer": {
+                "command": "powershell.exe -Command \"Rename-Computer -NewName 'WSUS' -Restart\"",
+                "waitAfterCompletion": "forever"
+              },
+              "b-set-dns-servers": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "powershell.exe -Command ",
+                      "\"",
+                      "Get-NetAdapter | Set-DnsClientServerAddress -ServerAddresses ",
+                      {
+                        "Fn::ImportValue": "DnsIpAddresses"
+                      },
+                      "\""
+                    ]
+                  ]
+                },
+                "waitAfterCompletion": "30"
+              },
+              "c-join-domain": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "powershell.exe -Command \"C:\\cfn\\scripts\\Join-Domain.ps1 -DomainName '",
+                      {
+                        "Fn::ImportValue": "DomainDNSName"
+                      },
+                      "' -UserName '",
+                      {
+                        "Fn::ImportValue": "DomainNetBIOSName"
+                      },
+                      "\\",
+                      {
+                        "Ref": "DomainAdminUser"
+                      },
+                      "' -Password '",
+                      {
+                        "Ref": "MicrosoftADPW"
+                      },
+                      "'\""
+                    ]
+                  ]
+                },
+                "waitAfterCompletion": "forever"
+              }
+            }
+          },
+          "install": {
+            "commands": {
+              "a-initialize-disks": {
+                "command": "powershell.exe -Command C:\\ProgramData\\Amazon\\EC2-Windows\\Launch\\Scripts\\InitializeDisks.ps1",
+                "waitAfterCompletion": "90"
+              },
+              "b-create-folder": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "powershell.exe -Command \"New-Item -Path D: -Name WSUS -ItemType Directory\""
+                    ]
+                  ]
+                },
+                "waitAfterCompletion": "0"
+              },
+              "c-install-wsus": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "powershell.exe -Command \"Install-WindowsFeature -Name Updateservices,UpdateServices-WidDB,UpdateServices-services -IncludeManagementTools\""
+                    ]
+                  ]
+                },
+                "waitAfterCompletion": "0"
+              },
+              "d-configure-content_dir": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "\"C:\\Program Files\\Update Services\\Tools\\wsusutil.exe\" postinstall CONTENT_DIR=D:\\WSUS"
+                    ]
+                  ]
+                },
+                "waitAfterCompletion": "15"
+              },
+              "e-start-wsus-sync": {
+                "command": "powershell.exe -Command C:\\cfn\\scripts\\Start-wsus-sync.ps1",
+                "waitAfterCompletion": "0"
+              }
+            }
+          },
+          "finalize": {
+            "commands": {
+              "1-signal-success": {
+                "command": "powershell.exe -Command \"Write-AWSQuickStartStatus\"",
+                "waitAfterCompletion": "0"
+              }
+            }
+          }
+        }
+      },
+      "Properties": {
+        "ImageId": {
+          "Ref": "AMIID"
+        },
+        "SubnetId": {
+          "Fn::ImportValue": "RestrictedASubnet"
+        },
+        "SecurityGroupIds": [
+          {
+            "Ref": "WSUSSecurityGroup"
+          },
+          {
+            "Fn::ImportValue": "ManagementSecurityGroup"
+          },
+          {
+            "Fn::ImportValue": "JumpSecurityGroup"
+          }
+        ],
+        "InstanceType": {
+          "Ref": "InstanceType"
+        },
+        "IamInstanceProfile": {
+          "Ref": "WSUSProfile"
+        },
+        "BlockDeviceMappings": [
+          {
+            "DeviceName": "/dev/sda1",
+            "Ebs": {
+              "VolumeSize": "50",
+              "VolumeType": "gp2"
+            }
+          }
+        ],
+        "Volumes": [
+          {
+            "VolumeId": {
+              "Ref": "Volume"
+            },
+            "Device": "/dev/sdf"
+          }
+        ],
+        "KeyName": {
+          "Ref": "AWS::AccountId"
+        },
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Join": [
+              "",
+              [
+                "<script>\n",
+                "cfn-init.exe -v -c config -s ",
+                {
+                  "Ref": "AWS::StackId"
+                },
+                " -r WSUS",
+                " --region ",
+                {
+                  "Ref": "AWS::Region"
+                },
+                "\n",
+                "</script>\n"
+              ]
+            ]
+          }
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "WSUS"
+          },
+          {
+            "Key": "CostCentre",
+            "Value": {
+              "Ref": "CostCentreTag"
+            }
+          }
+        ]
+      }
+    },
+    "WSUSRoute53Record": {
+      "Type": "AWS::Route53::RecordSet",
+      "Condition": "DeployInstance",
+      "Properties": {
+        "HostedZoneId": {
+          "Fn::ImportValue": "Route53HostedZone"
+        },
+        "Comment": "WSUS private Route 53 records",
+        "Name": {
+          "Fn::Join": [
+            "",
+            [
+              "wsus.",
+              {
+                "Ref": "BaseURL"
+              },
+              "."
+            ]
+          ]
+        },
+        "Type": "A",
+        "TTL": "900",
+        "ResourceRecords": [
+          {
+            "Fn::GetAtt": [
+              "WSUS",
+              "PrivateIp"
+            ]
+          }
+        ]
+      }
+    },
+    "WSUSRoute53RecordExisting": {
+      "Type": "AWS::Route53::RecordSet",
+      "Condition": "WSUSIPCond",
+      "Properties": {
+        "HostedZoneId": {
+          "Fn::ImportValue": "Route53HostedZone"
+        },
+        "Comment": "WSUS private Route 53 records",
+        "Name": {
+          "Fn::Join": [
+            "",
+            [
+              "wsus.",
+              {
+                "Ref": "BaseURL"
+              },
+              "."
+            ]
+          ]
+        },
+        "Type": "A",
+        "TTL": "900",
+        "ResourceRecords": [
+          {
+            "Ref": "WSUSIP"
+          }
+        ]
+      }
+    }
+  }
+}

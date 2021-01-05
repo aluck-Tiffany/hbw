@@ -1,0 +1,94 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Base IAM Groups",
+  "Resources": {
+    "Admin": {
+      "Type": "AWS::IAM::Group",
+      "Properties": {
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/AdministratorAccess"
+        ],
+        "GroupName": "admin"
+      }
+    },
+    "PowerUser": {
+      "Type": "AWS::IAM::Group",
+      "Properties": {
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/AdministratorAccess"
+        ],
+        "Policies": [
+          {
+            "PolicyName": "deny-iam",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Deny",
+                  "Action": [
+                    "iam:Add*",
+                    "iam:Attach*",
+                    "iam:Change*",
+                    "iam:Create*",
+                    "iam:Deactivate*",
+                    "iam:Delete*",
+                    "iam:Detach*",
+                    "iam:Enable*",
+                    "iam:Generate*",
+                    "iam:Pass*",
+                    "iam:Put*",
+                    "iam:Remove*",
+                    "iam:Resync*",
+                    "iam:Set*",
+                    "iam:Simulate*",
+                    "iam:Update*"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ],
+        "GroupName": "poweruser"
+      }
+    },
+    "InstanceOps": {
+      "Type": "AWS::IAM::Group",
+      "Properties": {
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/AmazonEC2FullAccess",
+          "arn:aws:iam::aws:policy/ReadOnlyAccess"
+        ],
+        "Policies": [
+          {
+            "PolicyName": "cloudformation",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "cloudformation:*"
+                  ],
+                  "Resource": [
+                    "*"
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "GroupName": "instanceops"
+      }
+    },
+    "ReadOnly": {
+      "Type": "AWS::IAM::Group",
+      "Properties": {
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/ReadOnlyAccess"
+        ],
+        "GroupName": "readonly"
+      }
+    }
+  }
+}

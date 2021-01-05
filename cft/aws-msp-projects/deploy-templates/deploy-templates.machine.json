@@ -1,0 +1,85 @@
+{
+    "Comment": "Deploy Stack Machine",
+    "StartAt": "SetTemplateToDeploy",
+    "States": {
+        "SetTemplateToDeploy": {
+            "Type": "Task",
+            "Resource": "${DeployTemplates.Arn}",
+            "Next": "DeployTemplate",
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "Fail"
+                }
+            ]
+        },
+        "DeployTemplate": {
+            "Type": "Task",
+            "Resource": "${DewfordExecuteStepFunction.Arn}",
+            "Next": "DescribeTemplateDeployment",
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "Fail"
+                }
+            ],
+            "ResultPath": "$.local.execution"
+        },
+        "DescribeTemplateDeployment": {
+            "Type": "Task",
+            "Resource": "${DewfordDescribeStepFunctionExecution.Arn}",
+            "Next": "HasDeployTemplateComplete",
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "Next": "Fail"
+                }
+            ],
+            "ResultPath": "$.local.execution"
+        },
+        "HasDeployTemplateComplete": {
+            "Type": "Choice",
+            "Choices": [
+                {
+                    "Variable": "$.local.execution.status",
+                    "StringEquals": "SUCCEEDED",
+                    "Next": "HasDeployTemplatesComplete"
+                },
+                {
+                    "Variable": "$.local.execution.status",
+                    "StringEquals": "FAILED",
+                    "Next": "Fail"
+                }
+            ],
+            "Default": "Wait"
+        },
+        "HasDeployTemplatesComplete": {
+            "Type": "Choice",
+            "Choices": [
+                {
+                    "Variable": "$.global.templatesIndex",
+                    "NumericEquals": -1,
+                    "Next": "Succeed"
+                }
+            ],
+            "Default": "SetTemplateToDeploy"
+        },
+        "Wait": {
+            "Type": "Wait",
+            "Seconds": 5,
+            "Next": "DescribeTemplateDeployment"
+        },
+        "Succeed": {
+            "Type": "Succeed"
+        },
+        "Fail": {
+            "Type": "Fail"
+        }
+    }
+}

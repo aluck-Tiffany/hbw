@@ -1,0 +1,350 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "AWS Microsoft AD Management Workstation",
+    "Parameters": {
+        "MicrosoftADPW": {
+            "Type": "String",
+            "NoEcho": "true"
+        },
+        "InstanceType": {
+            "Type": "String",
+            "Default": "t2.small"
+        },
+        "AMIID": {
+            "Type": "String",
+            "Default": "ami-75f32c17"
+        },
+        "Customer": {
+            "Type": "String",
+            "Description": "Optional: Customer Name - This is only to be used if more than one customer AD is deployed into the account",
+            "Default": ""
+        }
+    },
+    "Resources": {
+        "InstanceSG": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "GroupDescription": "AD Management",
+                "VpcId": {
+                    "Fn::ImportValue": "VPC"
+                },
+                "SecurityGroupIngress": [{
+                    "CidrIp": "127.0.0.1/32",
+                    "IpProtocol": "-1"
+                }],
+                "SecurityGroupEgress": [{
+                    "CidrIp": "0.0.0.0/0",
+                    "IpProtocol": "-1"
+                }]
+            }
+        },
+        "ADManagement": {
+            "Type": "AWS::EC2::Instance",
+            "Metadata": {
+                "AWS::CloudFormation::Init": {
+                    "configSets": {
+                        "config": [
+                            "setup",
+                            "install"
+                        ]
+                    },
+                    "setup": {
+                        "files": {
+                            "C:\\cfn\\cfn-hup.conf": {
+                                "content": {
+                                    "Fn::Join": [
+                                        "", [
+                                            "[main]\n",
+                                            "stack=",
+                                            {
+                                                "Ref": "AWS::StackId"
+                                            },
+                                            "\n",
+                                            "region=",
+                                            {
+                                                "Ref": "AWS::Region"
+                                            },
+                                            "\n"
+                                        ]
+                                    ]
+                                }
+                            },
+                            "C:\\cfn\\hooks.d\\cfn-auto-reloader.conf": {
+                                "content": {
+                                    "Fn::Join": [
+                                        "", [
+                                            "[cfn-auto-reloader-hook]\n",
+                                            "triggers=post.update\n",
+                                            "path=Resources.ADManagement.Metadata.AWS::CloudFormation::Init\n",
+                                            "action=cfn-init.exe -v -s ",
+                                            {
+                                                "Ref": "AWS::StackId"
+                                            },
+                                            " -r ADManagement",
+                                            " --region ",
+                                            {
+                                                "Ref": "AWS::Region"
+                                            },
+                                            "\n"
+                                        ]
+                                    ]
+                                }
+                            },
+                            "C:\\cfn\\scripts\\Unzip-Archive.ps1": {
+                                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/Unzip-Archive.ps1"
+                            },
+                            "C:\\cfn\\modules\\AWSQuickStart.zip": {
+                                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/AWSQuickStart.zip"
+                            },
+                            "C:\\cfn\\scripts\\Join-Domain.ps1": {
+                                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/Join-Domain.ps1"
+                            },
+                            "C:\\cfn\\scripts\\Disable-CredSSP.ps1": {
+                                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/Disable-CredSSP.ps1"
+                            },
+                            "C:\\cfn\\scripts\\Enable-CredSSP.ps1": {
+                                "source": "https://s3-ap-southeast-2.amazonaws.com/dcp-install/scripts/Enable-CredSSP.ps1"
+                            }
+                        },
+                        "commands": {
+                            "a-set-execution-policy": {
+                                "command": "powershell.exe -Command \"Set-ExecutionPolicy RemoteSigned -Force\"",
+                                "waitAfterCompletion": "0"
+                            },
+                            "b-unpack-quickstart-module": {
+                                "command": "powershell.exe -Command C:\\cfn\\scripts\\Unzip-Archive.ps1 -Source C:\\cfn\\modules\\AWSQuickStart.zip -Destination C:\\Windows\\system32\\WindowsPowerShell\\v1.0\\Modules\\",
+                                "waitAfterCompletion": "0"
+                            },
+                            "c-init-quickstart-module": {
+                                "command": {
+                                    "Fn::Join": [
+                                        "", [
+                                            "powershell.exe -Command \"",
+                                            "New-AWSQuickStartWaitHandle -Handle '",
+                                            {
+                                                "Ref": "ADManagementHandle"
+                                            },
+                                            "'\""
+                                        ]
+                                    ]
+                                },
+                                "waitAfterCompletion": "0"
+                            }
+                        },
+                        "services": {
+                            "windows": {
+                                "cfn-hup": {
+                                    "enabled": "true",
+                                    "ensureRunning": "true",
+                                    "files": [
+                                        "C:\\cfn\\cfn-hup.conf",
+                                        "C:\\cfn\\hooks.d\\cfn-auto-reloader.conf"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "install": {
+                        "commands": {
+                            "a-disable-win-fw": {
+                                "command": {
+                                    "Fn::Join": [
+                                        "", [
+                                            "powershell.exe -Command \"Get-NetFirewallProfile | Set-NetFirewallProfile -Enabled False\""
+                                        ]
+                                    ]
+                                },
+                                "waitAfterCompletion": "0"
+                            },
+                            "b-rename-computer": {
+                                "command": "powershell.exe -Command \"Rename-Computer -NewName 'management' -Restart\"",
+                                "waitAfterCompletion": "forever"
+                            },
+                            "c-set-dns-servers": {
+                                "command": {
+                                    "Fn::Join": [
+                                        "", [
+                                            "powershell.exe -Command ",
+                                            "\"",
+                                            "Get-NetAdapter | Set-DnsClientServerAddress -ServerAddresses ",
+                                            {
+                                                "Fn::ImportValue": {
+                                                    "Fn::Sub": "${Customer}DnsIpAddresses"
+                                                }
+                                            },
+                                            "\""
+                                        ]
+                                    ]
+                                },
+                                "waitAfterCompletion": "30"
+                            },
+                            "d-join-domain": {
+                                "command": {
+                                    "Fn::Join": [
+                                        "", [
+                                            "powershell.exe ",
+                                            "-Command \"",
+                                            "Add-Computer -DomainName ",
+                                            {
+                                                "Fn::ImportValue": {
+                                                    "Fn::Sub": "${Customer}DomainDNSName"
+                                                }
+                                            },
+                                            " -Credential ",
+                                            "(New-Object System.Management.Automation.PSCredential('",
+                                            {
+                                                "Fn::ImportValue": {
+                                                    "Fn::Sub": "${Customer}DomainNetBIOSName"
+                                                }
+                                            },
+                                            "\\Admin',",
+                                            "(ConvertTo-SecureString ",
+                                            {
+                                                "Ref": "MicrosoftADPW"
+                                            },
+                                            " -AsPlainText -Force))) ",
+                                            "-Restart\""
+                                        ]
+                                    ]
+                                },
+                                "waitAfterCompletion": "forever"
+                            },
+                            "e-enable-credssp": {
+                                "command": "powershell.exe -ExecutionPolicy RemoteSigned -Command \"C:\\cfn\\scripts\\Enable-CredSSP.ps1",
+                                "waitAfterCompletion": "0"
+                            },
+                            "f-install-management-tools": {
+                                "command": {
+                                    "Fn::Join": [
+                                        "", [
+                                            "powershell.exe -Command \"",
+                                            "Install-WindowsFeature -Name GPMC,RSAT-AD-PowerShell,RSAT-AD-AdminCenter,RSAT-AD-Tools,RSAT-ADDS,RSAT-ADDS-Tools,RSAT-DNS-Server ",
+                                            "\""
+                                        ]
+                                    ]
+                                },
+                                "waitAfterCompletion": "0"
+                            },
+                            "h-update-admin-expire": {
+                                "command": {
+                                    "Fn::Join": [
+                                        "", [
+                                            "powershell.exe -Command \"",
+                                            "Set-ADUser -Identity Admin -PasswordNeverExpires $true ",
+                                            " -Credential ",
+                                            "(New-Object System.Management.Automation.PSCredential('",
+                                            {
+                                                "Fn::ImportValue": {
+                                                    "Fn::Sub": "${Customer}DomainNetBIOSName"
+                                                }
+                                            },
+                                            "\\Admin',",
+                                            "(ConvertTo-SecureString ",
+                                            {
+                                                "Ref": "MicrosoftADPW"
+                                            },
+                                            " -AsPlainText -Force))) ",
+                                            "\""
+                                        ]
+                                    ]
+                                },
+                                "waitAfterCompletion": "0"
+                            },
+                            "i-disable-credssp": {
+                                "command": "powershell.exe -ExecutionPolicy RemoteSigned -Command \"C:\\cfn\\scripts\\Disable-CredSSP.ps1\"",
+                                "waitAfterCompletion": "0"
+                            },
+                            "j-signal-success": {
+                                "command": "powershell -Command \"Write-AWSQuickStartStatus\"",
+                                "waitAfterCompletion": "0"
+                            }
+                        }
+                    }
+                }
+            },
+            "Properties": {
+                "ImageId": {
+                    "Ref": "AMIID"
+                },
+                "InstanceType": {
+                    "Ref": "InstanceType"
+                },
+                "NetworkInterfaces": [{
+                    "DeleteOnTermination": "true",
+                    "DeviceIndex": 0,
+                    "SubnetId": {
+                        "Fn::ImportValue": "RestrictedASubnet"
+                    },
+                    "GroupSet": [{
+                            "Fn::ImportValue": {
+                                "Fn::Sub": "${Customer}ManagementSecurityGroup"
+                            }
+                        },
+                        {
+                            "Ref": "InstanceSG"
+                        }
+                    ]
+                }],
+                "Tags": [{
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Sub": "${Customer}ADManagement"
+                        }
+                    },
+                    {
+                        "Key": "CostCentre",
+                        "Value": "management"
+                    }
+                ],
+                "BlockDeviceMappings": [{
+                        "DeviceName": "/dev/sda1",
+                        "Ebs": {
+                            "VolumeSize": "100",
+                            "VolumeType": "gp2"
+                        }
+                    },
+                    {
+                        "DeviceName": "/dev/xvdb",
+                        "VirtualName": "ephemeral0"
+                    }
+                ],
+                "KeyName": {
+                    "Ref": "AWS::AccountId"
+                },
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": [
+                            "", [
+                                "<script>\n",
+                                "cfn-init.exe -v -c config -s ",
+                                {
+                                    "Ref": "AWS::StackId"
+                                },
+                                " -r ADManagement ",
+                                " --region ",
+                                {
+                                    "Ref": "AWS::Region"
+                                },
+                                "\n",
+                                "</script>"
+                            ]
+                        ]
+                    }
+                }
+            }
+        },
+        "ADManagementWaitCondition": {
+            "Type": "AWS::CloudFormation::WaitCondition",
+            "DependsOn": "ADManagement",
+            "Properties": {
+                "Handle": {
+                    "Ref": "ADManagementHandle"
+                },
+                "Timeout": "3600"
+            }
+        },
+        "ADManagementHandle": {
+            "Type": "AWS::CloudFormation::WaitConditionHandle"
+        }
+    }
+}

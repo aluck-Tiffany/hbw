@@ -1,0 +1,227 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Microsoft ADFS (Server instances & ELB only)",
+  "Parameters": {
+    "KeyPairName": {
+      "Description": "Public/private key pairs allow you to securely connect to your instance after it launches",
+      "Type": "AWS::EC2::KeyPair::KeyName"
+    },
+    "InstanceType": {
+      "Description": "Amazon EC2 instance type for the ADFS Servers",
+      "Type": "String",
+      "AllowedValues": [
+        "t2.micro",
+        "t2.small",
+        "m4.large"
+      ]
+    },
+    "ADFSServerNetBIOSName1": {
+      "Description": "NetBIOS name for the ADFS Server in AZ1",
+      "Type": "String",
+      "Default": "ADFS1",
+      "MinLength": "1",
+      "MaxLength": "15",
+      "AllowedPattern": "[a-zA-Z0-9]+"
+    },
+    "ADFSServerNetBIOSName2": {
+      "Description": "NetBIOS name for the ADFS Server in AZ2",
+      "Type": "String",
+      "Default": "ADFS2",
+      "MinLength": "1",
+      "MaxLength": "15",
+      "AllowedPattern": "[a-zA-Z0-9]+"
+    },
+    "ADFSServer1PrivateIP": {
+      "Description": "Fixed private IP for the first ADFS Server in AZ1",
+      "Type": "String"
+    },
+    "ADFSServer2PrivateIP": {
+      "Description": "Fixed private IP for the first ADFS Server in AZ1",
+      "Type": "String"
+    },
+    "VPC": {
+      "Description": "ID of the VPC (e.g., vpc-0343606e)",
+      "Type": "AWS::EC2::VPC::Id"
+    },
+    "PrivateSubnet1Id": {
+      "Description": "ID of the subnet you want to provision the first Exchange Server into (e.g., subnet-a0246dcd)",
+      "Type": "AWS::EC2::Subnet::Id"
+    },
+    "PrivateSubnet2Id": {
+      "Description": "ID of the subnet you want to provision the second Exchange Server into (e.g., subnet-e3246d8e)",
+      "Type": "AWS::EC2::Subnet::Id"
+    },
+    "VPCCIDR": {
+      "Description": "CIDR Block used by the VPC",
+      "Type": "String",
+      "AllowedPattern": "[0-9]+\\..+"
+    },
+    "ADFSImageId": {
+      "Description": "ID of the AWS AMI to use for ADFS instances",
+      "Type": "AWS::EC2::Image::Id"
+    }
+  },
+  "Resources": {
+    "ADFS1": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "ImageId": {
+          "Ref": "ADFSImageId"
+        },
+        "InstanceType": {
+          "Ref": "InstanceType"
+        },
+        "SubnetId": {
+          "Ref": "PrivateSubnet1Id"
+        },
+        "PrivateIpAddress": {
+          "Ref": "ADFSServer1PrivateIP"
+        },
+        "SecurityGroupIds": [{
+            "Ref": "ADFSSecurityGroup"
+          }
+        ],
+        "Tags": [{
+            "Key": "Name",
+            "Value": {
+              "Ref": "ADFSServerNetBIOSName1"
+            }
+          }
+        ],
+        "BlockDeviceMappings": [{
+            "DeviceName": "/dev/sda1",
+            "Ebs": {
+              "VolumeSize": "100",
+              "VolumeType": "gp2"
+            }
+          }
+        ],
+        "KeyName": {
+          "Ref": "KeyPairName"
+        }
+      }
+    },
+    "ADFS2": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "ImageId": {
+          "Ref": "ADFSImageId"
+        },
+        "InstanceType": {
+          "Ref": "InstanceType"
+        },
+        "SubnetId": {
+          "Ref": "PrivateSubnet2Id"
+        },
+        "PrivateIpAddress": {
+          "Ref": "ADFSServer2PrivateIP"
+        },
+        "SecurityGroupIds": [{
+            "Ref": "ADFSSecurityGroup"
+          }
+        ],
+        "Tags": [{
+            "Key": "Name",
+            "Value": {
+              "Ref": "ADFSServerNetBIOSName2"
+            }
+          }
+        ],
+        "BlockDeviceMappings": [{
+            "DeviceName": "/dev/sda1",
+            "Ebs": {
+              "VolumeSize": "100",
+              "VolumeType": "gp2"
+            }
+          }
+        ],
+        "KeyName": {
+          "Ref": "KeyPairName"
+        }
+      }
+    },
+    "ADFSSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Enable traffic to ADFS servers",
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "SecurityGroupIngress": [{
+            "IpProtocol": "tcp",
+            "FromPort": "443",
+            "ToPort": "443",
+            "SourceSecurityGroupId": {
+              "Ref": "ADFSELBSecurityGroup"
+            }
+          }, {
+            "IpProtocol": "-1",
+            "CidrIp": {
+              "Ref": "VPCCIDR"
+            }
+          }
+        ]
+      }
+    },
+    "ADFSELBSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Enable traffic to ADFS from the Intranet",
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "SecurityGroupIngress": [{
+            "IpProtocol": "tcp",
+            "FromPort": "443",
+            "ToPort": "443",
+            "CidrIp": {
+              "Ref": "VPCCIDR"
+            }
+          }
+        ]
+      }
+    },
+    "ADFSLoadBalancer": {
+      "Type": "AWS::ElasticLoadBalancing::LoadBalancer",
+      "Properties": {
+        "Subnets": [{
+            "Ref": "PrivateSubnet1Id"
+          }, {
+            "Ref": "PrivateSubnet2Id"
+          }
+        ],
+        "Scheme": "internal",
+        "SecurityGroups": [{
+            "Ref": "ADFSELBSecurityGroup"
+          }
+        ],
+        "CrossZone": "true",
+        "Listeners": [{
+            "LoadBalancerPort": "443",
+            "InstancePort": "443",
+            "Protocol": "TCP"
+          }
+        ],
+        "Instances": [{
+            "Ref": "ADFS1"
+          }, {
+            "Ref": "ADFS2"
+          }
+        ],
+        "Tags": [{
+            "Key": "Name",
+            "Value": "ADFSELB"
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "ADFSELBEndpoint": {
+      "Value": {
+        "Fn::GetAtt": ["ADFSLoadBalancer", "DNSName"]
+      },
+      "Description": "ADFS ELB Endpoint"
+    }
+  }
+}

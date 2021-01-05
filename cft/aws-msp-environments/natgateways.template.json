@@ -1,0 +1,184 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "NAT Gateways",
+  "Parameters": {
+    "VPCIdentifier": {
+      "Type": "String",
+      "Description": "Specify the VPC Identifier - This is only to be used if more than one VPC is being deployed into the account",
+      "Default": ""
+    }
+  },
+  "Resources": {
+    "ControlledANatEIP": {
+      "Type": "AWS::EC2::EIP",
+      "Properties": {
+        "Domain": "vpc"
+      }
+    },
+    "ControlledBNatEIP": {
+      "Type": "AWS::EC2::EIP",
+      "Properties": {
+        "Domain": "vpc"
+      }
+    },
+    "ControlledCNatEIP": {
+      "Type": "AWS::EC2::EIP",
+      "Properties": {
+        "Domain": "vpc"
+      }
+    },
+    "ControlledANatGateway": {
+      "Type": "AWS::EC2::NatGateway",
+      "Properties": {
+        "AllocationId": {
+          "Fn::GetAtt": [
+            "ControlledANatEIP",
+            "AllocationId"
+          ]
+        },
+        "SubnetId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "ControlledASubnet${VPCIdentifier}"
+          }
+        }
+      }
+    },
+    "ControlledBNatGateway": {
+      "Type": "AWS::EC2::NatGateway",
+      "Properties": {
+        "AllocationId": {
+          "Fn::GetAtt": [
+            "ControlledBNatEIP",
+            "AllocationId"
+          ]
+        },
+        "SubnetId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "ControlledBSubnet${VPCIdentifier}"
+          }
+        }
+      }
+    },
+    "ControlledCNatGateway": {
+      "Type": "AWS::EC2::NatGateway",
+      "Properties": {
+        "AllocationId": {
+          "Fn::GetAtt": [
+            "ControlledCNatEIP",
+            "AllocationId"
+          ]
+        },
+        "SubnetId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "ControlledCSubnet${VPCIdentifier}"
+          }
+        }
+      }
+    },
+    "RestrictedANATRoute": {
+      "Type": "AWS::EC2::Route",
+      "Properties": {
+        "RouteTableId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "RestrictedARouteTable${VPCIdentifier}"
+          }
+        },
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "NatGatewayId": {
+          "Ref": "ControlledANatGateway"
+        }
+      }
+    },
+    "RestrictedBNATRoute": {
+      "Type": "AWS::EC2::Route",
+      "Properties": {
+        "RouteTableId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "RestrictedBRouteTable${VPCIdentifier}"
+          }
+        },
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "NatGatewayId": {
+          "Ref": "ControlledBNatGateway"
+        }
+      }
+    },
+    "RestrictedCNATRoute": {
+      "Type": "AWS::EC2::Route",
+      "Properties": {
+        "RouteTableId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "RestrictedCRouteTable${VPCIdentifier}"
+          }
+        },
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "NatGatewayId": {
+          "Ref": "ControlledCNatGateway"
+        }
+      }
+    },
+    "SecuredANATRoute": {
+      "Type": "AWS::EC2::Route",
+      "Properties": {
+        "RouteTableId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "SecuredARouteTable${VPCIdentifier}"
+          }
+        },
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "NatGatewayId": {
+          "Ref": "ControlledANatGateway"
+        }
+      }
+    },
+    "SecuredBNATRoute": {
+      "Type": "AWS::EC2::Route",
+      "Properties": {
+        "RouteTableId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "SecuredBRouteTable${VPCIdentifier}"
+          }
+        },
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "NatGatewayId": {
+          "Ref": "ControlledBNatGateway"
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "ControlledANatGateway": {
+      "Description": "ControlledANatGateway Logical ID",
+      "Value": {
+        "Ref": "ControlledANatGateway"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "ControlledANatGateway${VPCIdentifier}"
+        }
+      }
+    },
+    "ControlledBNatGateway": {
+      "Description": "ControlledBNatGateway Logical ID",
+      "Value": {
+        "Ref": "ControlledBNatGateway"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "ControlledBNatGateway${VPCIdentifier}"
+        }
+      }
+    },
+    "ControlledCNatGateway": {
+      "Description": "ControlledCNatGateway Logical ID",
+      "Value": {
+        "Ref": "ControlledCNatGateway"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "ControlledCNatGateway${VPCIdentifier}"
+        }
+      }
+    }
+  }
+}

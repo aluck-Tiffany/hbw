@@ -1,0 +1,146 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Parameters": {
+    "AccountId": {
+      "Type": "String"
+    },
+    "EnableExecuteChangeSet": {
+      "Type": "String",
+      "Default": "false",
+      "Description": "Set to true in DEV environments, Set to false in PRD environments"
+    }
+  },
+  "Conditions": {
+    "DEV": {
+      "Fn::Equals": [
+        {
+          "Ref": "EnableExecuteChangeSet"
+        },
+        "true"
+      ]
+    }
+  },
+  "Description": "Change Sets Role and Bucket",
+  "Resources": {
+    "Role": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": "changesets",
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:aws:iam::",
+                      {
+                        "Ref": "AccountId"
+                      },
+                      ":root"
+                    ]
+                  ]
+                }
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "stackchangesets",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": {
+                    "Fn::If": [
+                      "DEV",
+                      [
+                        "*"
+                      ],
+                      [
+                        "cloudformation:CreateChangeSet",
+                        "cloudformation:DeleteChangeSet",
+                        "cloudformation:Describe*",
+                        "cloudformation:Get*"
+                      ]
+                    ]
+                  },
+                  "Resource": [
+                    "*"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "PolicyName": "instances",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": {
+                "Effect": "Deny",
+                "Action": "ec2:RunInstances",
+                "Resource": "*",
+                "Condition": {
+                  "ForAnyValue:StringNotLike": {
+                    "ec2:InstanceType": [
+                      "t2.micro",
+                      "m4.xlarge"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "PolicyName": "s3",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:*"
+                  ],
+                  "Resource": {
+                    "Fn::Join": [
+                      "",
+                      [
+                        "arn:aws:s3:::",
+                        {
+                          "Ref": "AWS::AccountId"
+                        },
+                        "-cf/*"
+                      ]
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "Bucket": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "BucketName": {
+          "Fn::Join": [
+            "",
+            [
+              {
+                "Ref": "AWS::AccountId"
+              },
+              "-cf"
+            ]
+          ]
+        }
+      }
+    }
+  }
+}

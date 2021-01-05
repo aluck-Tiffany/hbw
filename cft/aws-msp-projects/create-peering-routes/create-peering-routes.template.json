@@ -1,0 +1,160 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Create Peering Routes",
+    "Parameters": {
+        "CICDBucket": {
+            "Type": "String"
+        },
+        "CreatePeeringRoutesVersion": {
+            "Type": "String"
+        },
+        "VPCIdentifier": {
+            "Type": "String",
+            "Description": "Specify the VPC Identifier - This is only to be used if more than one VPC is being deployed into the account",
+            "Default": ""
+        }
+    },
+    "Resources": {
+        "Role": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Statement": [
+                        {
+                            "Principal": {
+                                "AWS": "*"
+                            },
+                            "Action": [
+                                "sts:AssumeRole"
+                            ],
+                            "Effect": "Allow"
+                        }
+                    ]
+                },
+                "Path": "/",
+                "Policies": [
+                    {
+                        "PolicyName": "acceptVpcPeeringConnection",
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": "ec2:AcceptVpcPeeringConnection",
+                                    "Resource": "*"
+                                }
+                            ]
+                        }
+                    }
+                ],
+                "RoleName": {
+                    "Fn::Sub": "Peering-Accepter-Role${VPCIdentifier}"
+                }
+            }
+        },
+        "FunctionRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": "lambda.amazonaws.com"
+                            },
+                            "Action": "sts:AssumeRole"
+                        }
+                    ]
+                },
+                "ManagedPolicyArns": [
+                    "arn:aws:iam::aws:policy/AdministratorAccess"
+                ]
+            }
+        },
+        "CreatePeeringRoutes": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Code": {
+                    "S3Bucket": {
+                        "Ref": "CICDBucket"
+                    },
+                    "S3Key": {
+                        "Fn::Sub": "aws-msp-projects/create-peering-routes/${CreatePeeringRoutesVersion}/function.zip"
+                    }
+                },
+                "Handler": "index.handler",
+                "MemorySize": 128,
+                "Role": {
+                    "Fn::GetAtt": [
+                        "FunctionRole",
+                        "Arn"
+                    ]
+                },
+                "Runtime": "nodejs6.10",
+                "Timeout": 5,
+                "Environment": {
+                    "Variables": {
+                        "bucket": {
+                            "Ref": "CICDBucket"
+                        },
+                        "version": {
+                            "Ref": "CreatePeeringRoutesVersion"
+                        },
+                        "vpcIdentifier": {
+                            "Ref": "VPCIdentifier"
+                        }
+                    }
+                }
+            }
+        },
+        "Permission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "CreatePeeringRoutes"
+                },
+                "SourceArn": {
+                    "Fn::GetAtt": [
+                        "Rule",
+                        "Arn"
+                    ]
+                },
+                "Principal": "events.amazonaws.com"
+            }
+        },
+        "Rule": {
+            "Type": "AWS::Events::Rule",
+            "Properties": {
+                "EventPattern": {
+                    "detail-type": [
+                        "AWS API Call via CloudTrail"
+                    ],
+                    "detail": {
+                        "eventSource": [
+                            "ec2.amazonaws.com"
+                        ],
+                        "eventName": [
+                            "AcceptVpcPeeringConnection"
+                        ]
+                    }
+                },
+                "Name": {
+                    "Fn::Sub": "create-peering-routes${VPCIdentifier}"
+                },
+                "Targets": [
+                    {
+                        "Arn": {
+                            "Fn::GetAtt": [
+                                "CreatePeeringRoutes",
+                                "Arn"
+                            ]
+                        },
+                        "Id": "create-peering-routes"
+                    }
+                ]
+            }
+        }
+    }
+}

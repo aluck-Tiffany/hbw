@@ -1,0 +1,224 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Role (and Instance Profile) for CPM",
+    "Resources": {
+      "CPM": {
+        "Type": "AWS::IAM::Role",
+        "Properties": {
+          "AssumeRolePolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Effect": "Allow",
+                "Principal": {
+                  "Service": "ec2.amazonaws.com"
+                },
+                "Action": "sts:AssumeRole"
+              }
+            ]
+          },
+          "Policies": [
+            {
+              "PolicyName": "CPM-Setup",
+              "PolicyDocument": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Action": [
+                      "ec2:AttachVolume",
+                      "ec2:AuthorizeSecurityGroupEgress",
+                      "ec2:AuthorizeSecurityGroupIngress",
+                      "ec2:CreateTags",
+                      "ec2:CreateVolume",
+                      "ec2:DescribeAvailabilityZones",
+                      "ec2:DescribeInstanceAttribute",
+                      "ec2:DescribeInstanceStatus",
+                      "ec2:DescribeInstances",
+                      "ec2:DescribeSecurityGroups",
+                      "ec2:DescribeTags",
+                      "ec2:DescribeVolumeAttribute",
+                      "ec2:DescribeVolumeStatus",
+                      "ec2:DescribeVolumes",
+                      "kms:*"
+                    ],
+                    "Sid": "Stmt1374233119000",
+                    "Resource": [
+                      "*"
+                    ],
+                    "Effect": "Allow"
+                  }
+                ]
+              }
+            },
+            {
+              "PolicyName": "CPM-Backup",
+              "PolicyDocument": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Action": [
+                      "ec2:CopySnapshot",
+                      "ec2:CopyImage",
+                      "ec2:CreateImage",
+                      "ec2:CreateSnapshot",
+                      "ec2:CreateTags",
+                      "ec2:DeleteSnapshot",
+                      "ec2:DescribeAddresses",
+                      "ec2:DescribeAvailabilityZones",
+                      "ec2:DescribeImageAttribute",
+                      "ec2:DescribeImages",
+                      "ec2:DescribeInstanceAttribute",
+                      "ec2:DescribeInstanceStatus",
+                      "ec2:DescribeInstances",
+                      "ec2:DescribeKeyPairs",
+                      "ec2:DescribePlacementGroups",
+                      "ec2:DescribeRegions",
+                      "ec2:DescribeSecurityGroups",
+                      "ec2:DescribeSnapshotAttribute",
+                      "ec2:DescribeSnapshots",
+                      "ec2:DescribeSubnets",
+                      "ec2:DescribeTags",
+                      "ec2:DescribeVolumeAttribute",
+                      "ec2:DescribeVolumeStatus",
+                      "ec2:DescribeVolumes",
+                      "ec2:DescribeVpcs",
+                      "ec2:DeregisterImage",
+                      "ec2:ModifyImageAttribute",
+                      "ec2:ModifySnapshotAttribute",
+                      "ec2:ResetSnapshotAttribute",
+                      "kms:ListKeys",
+                      "kms:ListAliases"
+                    ],
+                    "Sid": "Stmt1374236955000",
+                    "Resource": [
+                      "*"
+                    ],
+                    "Effect": "Allow"
+                  },
+                  {
+                    "Action": [
+                      "rds:CreateDBSnapshot",
+                      "rds:DeleteDBSnapshot",
+                      "rds:DescribeDBInstances",
+                      "rds:DescribeDBClusters",
+                      "rds:DescribeDBParameterGroups",
+                      "rds:DescribeDBParameters",
+                      "rds:DescribeDBSnapshots",
+                      "rds:DescribeDBSubnetGroups",
+                      "rds:ListTagsForResource",
+                      "rds:CopyDBSnapshot",
+                      "redshift:DescribeClusters"
+                    ],
+                    "Sid": "Stmt1374237153000",
+                    "Resource": [
+                      "*"
+                    ],
+                    "Effect": "Allow"
+                  }
+                ]
+              }
+            },
+            {
+              "PolicyName": "CPM-Restore",
+              "PolicyDocument": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Action": [
+                      "ec2:AllocateAddress",
+                      "ec2:AssociateAddress",
+                      "ec2:AttachVolume",
+                      "ec2:CreateImage",
+                      "ec2:CreateVolume",
+                      "ec2:DeleteVolume",
+                      "ec2:DeregisterImage",
+                      "ec2:DescribeImages",
+                      "ec2:DetachVolume",
+                      "ec2:ModifyImageAttribute",
+                      "ec2:ModifyInstanceAttribute",
+                      "ec2:ModifySnapshotAttribute",
+                      "ec2:ModifyVolumeAttribute",
+                      "ec2:RegisterImage",
+                      "ec2:RunInstances",
+                      "ec2:StartInstances",
+                      "ec2:StopInstances",
+                      "iam:PassRole",
+                      "kms:ReEncrypt*",
+                      "kms:CreateGrant"
+                    ],
+                    "Sid": "Stmt1374243096000",
+                    "Resource": [
+                      "*"
+                    ],
+                    "Effect": "Allow"
+                  },
+                  {
+                    "Action": [
+                      "rds:RestoreDBInstanceFromDBSnapshot",
+                      "rds:RestoreDBClusterFromSnapshot"
+                    ],
+                    "Sid": "Stmt1374243250000",
+                    "Resource": [
+                      "*"
+                    ],
+                    "Effect": "Allow"
+                  }
+                ]
+              }
+            },
+            {
+              "PolicyName": "CPM-AssumeRole",
+              "PolicyDocument": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Action": [
+                      "sts:AssumeRole"
+                    ],
+                    "Sid": "Stmt1374237153001",
+                    "Resource": [
+                      "*"
+                    ],
+                    "Effect": "Allow"
+                  }
+                ]
+              }
+            },
+            {
+              "PolicyName": "CPM-SNS",
+              "PolicyDocument": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Action": [
+                      "sns:CreateTopic",
+                      "sns:GetTopicAttributes",
+                      "sns:Publish",
+                      "sns:SetTopicAttributes",
+                      "sns:Subscribe"
+                    ],
+                    "Sid": "Stmt1374237153001",
+                    "Resource": [
+                      "*"
+                    ],
+                    "Effect": "Allow"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "CPMProfile": {
+        "Type": "AWS::IAM::InstanceProfile",
+        "Properties": {
+          "Path": "/",
+          "Roles": [
+            {
+              "Ref": "CPM"
+            }
+          ]
+        }
+      }
+    }
+  }

@@ -1,0 +1,544 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Deploys instances in 2 subnets & Creates A Security Group with all required Microsoft AD ports.",
+  "Metadata": {
+    "AWS::CloudFormation::Interface": {
+      "ParameterGroups": [
+        {
+          "Label": {
+            "default": "Active Directory Configuration"
+          },
+          "Parameters": [
+            "DomainDNSName",
+            "DomainNetBIOSName"
+          ]
+        },
+        {
+          "Label": {
+            "default": "EC2 Configuration"
+          },
+          "Parameters": [
+            "InstanceType",
+            "AMIID",
+            "RootVolSize",
+            "Key"
+          ]
+        },
+        {
+          "Label": {
+            "default": "Subnets"
+          },
+          "Parameters": [
+            "PrivateSubnet1",
+            "PrivateSubnet2"
+          ]
+        },
+        {
+          "Label": {
+            "default": "Instance Tags"
+          },
+          "Parameters": [
+            "NameTag1",
+            "NameTag2",
+            "CostCentreTag"
+          ]
+        }
+      ],
+      "ParameterLabels": {
+        "PrivateSubnet1": {
+          "default": "Subnet for AD controller 1"
+        },
+        "PrivateSubnet2": {
+          "default": "Subnet for AD controller 2"
+        },
+        "NameTag1": {
+          "default": "Name Tag of AD Controller 1"
+        },
+        "NameTag2": {
+          "default": "Name Tag of AD Controller 2"
+        },
+        "CostCentreTag": {
+          "default": "Cost Centre Tag"
+        },
+        "AMIID": {
+          "default": "AMI ID"
+        },
+        "InstanceType": {
+          "default": "Instance Type"
+        },
+        "RootVolSize": {
+          "default": "Root Volume Size"
+        }
+      }
+    }
+  },
+  "Parameters": {
+    "DomainDNSName": {
+      "Type": "String"
+    },
+    "DomainNetBIOSName": {
+      "Type": "String"
+    },
+    "InstanceType": {
+      "Type": "String",
+      "AllowedValues": [
+        "t2.nano",
+        "t2.micro",
+        "t2.small",
+        "t2.medium",
+        "t2.large",
+        "t2.xlarge",
+        "t2.2xlarge",
+        "m4.large",
+        "m4.xlarge",
+        "m4.2xlarge",
+        "m4.4xlarge",
+        "c4.large",
+        "c4.xlarge",
+        "c4.2xlarge",
+        "c4.4xlarge",
+        "r4.large",
+        "r4.xlarge",
+        "r4.2xlarge"
+      ]
+    },
+    "VPCIdentifier": {
+      "Type": "String",
+      "Description": "Specify the VPC Identifier - This is only to be used if more than one VPC is being deployed into the account"
+    },
+    "AMIID": {
+      "Type": "String",
+      "Description": "Specify the AMI ID"
+    },
+    "Key": {
+      "Type": "AWS::EC2::KeyPair::KeyName",
+      "Description": "Select an existing key pair to use for connecting to your Instances",
+      "MinLength": "1",
+      "MaxLength": "255"
+    },
+    "NameTag1": {
+      "Type": "String",
+      "Default": "DC1"
+    },
+    "NameTag2": {
+      "Type": "String",
+      "Default": "DC2"
+    },
+    "CostCentreTag": {
+      "Type": "String",
+      "Default": "management"
+    },
+    "RootVolSize": {
+      "Type": "String",
+      "Description": "Leave Blank for Default AMI Size",
+      "Default": ""
+    },
+    "PrivateSubnet1": {
+      "Description": "Existing Subnet for AD Controller 1.",
+      "Type": "AWS::EC2::Subnet::Id"
+    },
+    "PrivateSubnet2": {
+      "Description": "Existing Subnet for AD Controller 2.",
+      "Type": "AWS::EC2::Subnet::Id"
+    },
+    "BootstrapURL": {
+      "Description": "Customer bootstrap url used for userdata",
+      "Type": "String",
+      "Default": "bootstrap.customer.hcs.datacom.com.au"
+    }
+  },
+  "Conditions": {
+    "RootVolSizeCond": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "RootVolSize"
+            },
+            ""
+          ]
+        }
+      ]
+    }
+  },
+  "Resources": {
+    "ADSG": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "AD Controller Security Group",
+        "VpcId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "VPC${VPCIdentifier}"
+          }
+        },
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "udp",
+            "FromPort": "445",
+            "ToPort": "445",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "udp",
+            "FromPort": "138",
+            "ToPort": "138",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "udp",
+            "FromPort": "464",
+            "ToPort": "464",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "464",
+            "ToPort": "464",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "udp",
+            "FromPort": "389",
+            "ToPort": "389",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "udp",
+            "FromPort": "53",
+            "ToPort": "53",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "389",
+            "ToPort": "389",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "udp",
+            "FromPort": "123",
+            "ToPort": "123",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "445",
+            "ToPort": "445",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "ICMP",
+            "FromPort": "-1",
+            "ToPort": "-1",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "3268",
+            "ToPort": "3269",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "1024",
+            "ToPort": "65535",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "88",
+            "ToPort": "88",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "135",
+            "ToPort": "135",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "139",
+            "ToPort": "139",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "udp",
+            "FromPort": "135",
+            "ToPort": "135",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "636",
+            "ToPort": "636",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "53",
+            "ToPort": "53",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "udp",
+            "FromPort": "88",
+            "ToPort": "88",
+            "CidrIp": "0.0.0.0/0"
+          }
+        ],
+        "SecurityGroupEgress": [
+          {
+            "CidrIp": "127.0.0.1/32",
+            "IpProtocol": "-1"
+          }
+        ]
+      }
+    },
+    "ADInbound": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "Description": "AD Controller Communication",
+        "SourceSecurityGroupId": {
+          "Ref": "ADSG"
+        },
+        "IpProtocol": "-1",
+        "FromPort": "-1",
+        "ToPort": "-1",
+        "GroupId": {
+          "Ref": "ADSG"
+        }
+      }
+    },
+    "ADOutbound": {
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "Description": "AD Controller Communication",
+        "CidrIp": "0.0.0.0/0",
+        "IpProtocol": "-1",
+        "FromPort": "-1",
+        "ToPort": "-1",
+        "GroupId": {
+          "Ref": "ADSG"
+        }
+      }
+    },
+    "Instance1": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "BlockDeviceMappings": [
+          {
+            "DeviceName": "/dev/sda1",
+            "Ebs": {
+              "VolumeType": "gp2",
+              "DeleteOnTermination": "true",
+              "VolumeSize": {
+                "Fn::If": [
+                  "RootVolSizeCond",
+                  {
+                    "Ref": "RootVolSize"
+                  },
+                  {
+                    "Ref": "AWS::NoValue"
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        "ImageId": {
+          "Ref": "AMIID"
+        },
+        "NetworkInterfaces": [
+          {
+            "NetworkInterfaceId": {
+              "Ref": "Instance1Eth0"
+            },
+            "DeviceIndex": "0"
+          }
+        ],
+        "InstanceType": {
+          "Ref": "InstanceType"
+        },
+        "KeyName": {
+          "Ref": "Key"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Ref": "NameTag1"
+            }
+          },
+          {
+            "Key": "CostCentre",
+            "Value": {
+              "Ref": "CostCentreTag"
+            }
+          }
+        ],
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Join": [
+              "\n",
+              [
+                "<powershell>",
+                {
+                  "Fn::Sub": "Invoke-WebRequest \"https://${BootstrapURL}/latest/default?os=windows2016\" -OutFile $env:temp\\bootstrap.ps1; Invoke-Expression -Command \"$env:temp\\bootstrap.ps1\""
+                },
+                "</powershell>"
+              ]
+            ]
+          }
+        }
+      }
+    },
+    "Instance2": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "BlockDeviceMappings": [
+          {
+            "DeviceName": "/dev/sda1",
+            "Ebs": {
+              "VolumeType": "gp2",
+              "DeleteOnTermination": "true",
+              "VolumeSize": {
+                "Fn::If": [
+                  "RootVolSizeCond",
+                  {
+                    "Ref": "RootVolSize"
+                  },
+                  {
+                    "Ref": "AWS::NoValue"
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        "ImageId": {
+          "Ref": "AMIID"
+        },
+        "NetworkInterfaces": [
+          {
+            "NetworkInterfaceId": {
+              "Ref": "Instance2Eth0"
+            },
+            "DeviceIndex": "0"
+          }
+        ],
+        "InstanceType": {
+          "Ref": "InstanceType"
+        },
+        "KeyName": {
+          "Ref": "Key"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Ref": "NameTag2"
+            }
+          },
+          {
+            "Key": "CostCentre",
+            "Value": {
+              "Ref": "CostCentreTag"
+            }
+          }
+        ],
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Join": [
+              "\n",
+              [
+                "<powershell>",
+                {
+                  "Fn::Sub": "Invoke-WebRequest \"https://${BootstrapURL}/latest/default?os=windows2016\" -OutFile $env:temp\\bootstrap.ps1; Invoke-Expression -Command \"$env:temp\\bootstrap.ps1\""
+                },
+                "</powershell>"
+              ]
+            ]
+          }
+        }
+      }
+    },
+    "Instance1Eth0": {
+      "Type": "AWS::EC2::NetworkInterface",
+      "Properties": {
+        "GroupSet": [
+          {
+            "Fn::ImportValue": "ManagementSecurityGroup"
+          },
+          {
+            "Ref": "ADSG"
+          }
+        ],
+        "SubnetId": {
+          "Ref": "PrivateSubnet1"
+        }
+      }
+    },
+    "Instance2Eth0": {
+      "Type": "AWS::EC2::NetworkInterface",
+      "Properties": {
+        "GroupSet": [
+          {
+            "Fn::ImportValue": "ManagementSecurityGroup"
+          },
+          {
+            "Ref": "ADSG"
+          }
+        ],
+        "SubnetId": {
+          "Ref": "PrivateSubnet2"
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "DomainDNSName": {
+      "Description": "Microsoft AD DNS name",
+      "Value": {
+        "Ref": "DomainDNSName"
+      },
+      "Export": {
+        "Name": "DomainDNSName"
+      }
+    },
+    "DomainNetBIOSName": {
+      "Description": "Microsoft AD NetBios name",
+      "Value": {
+        "Ref": "DomainNetBIOSName"
+      },
+      "Export": {
+        "Name": "DomainNetBIOSName"
+      }
+    },
+    "DnsIpAddresses": {
+      "Description": "Microsoft AD DNS server IP addresses",
+      "Value": {
+        "Fn::Join": [
+          ",",
+          [
+            {
+              "Fn::GetAtt": [
+                "Instance1",
+                "PrivateIp"
+              ]
+            },
+            {
+              "Fn::GetAtt": [
+                "Instance2",
+                "PrivateIp"
+              ]
+            }
+          ]
+        ]
+      },
+      "Export": {
+        "Name": "DnsIpAddresses"
+      }
+    }
+  }
+}
