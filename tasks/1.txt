@@ -1,0 +1,13 @@
+Task 1: Development workstation preparation
+
+1. Install Linux VM on your laptop (Ubutu or Centos7, skip this step if you have Linux VM running on ur laptop)
+2. Enable below services on Linux VM
+- sshd
+- try to SSH to linux VM from ur laptop
+3. Install below packages on ur Linux VM
+- git
+- python 3
+- pip3 
+- jq
+- boto3  https://pypi.org/project/boto3/
+- aws CLI https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2-linux.html

@@ -1,0 +1,7 @@
+Task 2: Setup VScode on ur laptop (Windows or MacOs)
+- Install VScoce on your laptopn https://code.visualstudio.com/download
+- Install common VScode plugins https://x-team.com/blog/best-vscode-extensions/
+  * remote-ssh
+  * git
+  * ...
+- Try to set up remote host in vscode so you can develop code in Linux VM on ur windows laptop remotely 
