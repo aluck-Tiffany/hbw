@@ -1,0 +1,24 @@
+Task 4: 
+- Setting up personal AWS account as Management Account using CloudFormation Templates
+  Code:
+  https://github.com/hbwork/aws-ces-environment/tree/master/aws-msp-environments
+
+Note:
+- Create EC2 key pair
+- To save running account, it is better deploy an NAT Instance instead of using NAT Gateway which occurs on-going running cost
+  https://docs.aws.amazon.com/vpc/latest/userguide/VPC_NAT_Instance.html
+- Try to automate NAT instance using Terraform code?
+- Create IAM user and configure AWS CLI on Linux VM
+- Configure AWS Credentials on Linux VM
+https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html
+
+- Test: Run below command on Linux VM
+aws sts get-caller-identity [--profile profilename]
+Expected output:
+{
+    "UserId": "AIDAWEDEMYE4GSAKGIKL3",
+    "Account": "421117346104",
+    "Arn": "arn:aws:iam::421117346104:user/ericho"
+}
+
+

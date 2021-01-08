@@ -11,3 +11,4 @@ Task 1: Development workstation preparation
 - jq
 - boto3  https://pypi.org/project/boto3/
 - aws CLI https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2-linux.html
+- terraform 0.13.x

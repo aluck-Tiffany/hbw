@@ -1,0 +1,8 @@
+Task 3: Setting up logging account using CloudFormation 
+Code:
+https://github.com/hbwork/aws-ces-environment/tree/master/aws-msp-environments
+
+Notes:
+- Region: Tokyo
+- Ignore sumoligic configuration
+- Logging account console URL: https://hbwork-logging.signin.aws.amazon.com/console
