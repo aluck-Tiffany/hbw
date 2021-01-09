@@ -1,0 +1,62 @@
+Task 5: AWS ACCOUNT QA script
+Script lanaguage:
+- Bash + AWS CLI + jq
+
+Items to check (code not verified)
+- AWS Credential check
+AWS CLI: aws sts get-caller-identity --query Account --output text
+Expected result: 12 digits account number
+- AWS Config enabled
+aws configservice describe-configuration-records --query ConfigurationRecorders   #Config Recorder
+aws configservice describe-configuration-records --query "ConfigurationRecorders[].roleARN"  #Config IAM role, non-null vavlue expected
+aws configservice describe-configuration-records --query "ConfigurationRecorders[].recordingGroup[].allSupported"   # All Resource Supported, true expected
+aws configservice describe-configuration-records --query "ConfigurationRecorders[].recordingGroup[].includeGlobalResourcesTypes" --output text  # include Global Resource Types, true expected
+
+- AWS CloudTrail
+aws cloudtrail describe-trails --trail-name-list Default --query trailList
+aws cloudtrail describe-trails --trail-name-list Default --query trailList[].S3KeyPrefix --output text   # S3 bucket should be configured here
+
+Logging is enabled for default trail
+ctStatus=$(aws cloudtrail get-trail-status --name Default)
+if [[ $(aws cloudtrail get-trail-status --name Default --query "IsLogging") == "true" ]]   # true is expected
+
+Logging should not be stopped
+aws cloudtrail get-trail-status --name Default --query "TimeLoggingStopped"
+
+- Guard Duty is enabled in ur region (or all AWS regions)
+
+- Trusted Advisor
+advisorCheckes=$(aws support describe-trusted-advisor-checks --region us-east-1 --lanaguage en --query "checks[*].{id:id, name:name}")
+ids=$(echo $advisorCheckes |jq '[]|.id' | tr -d '"' | tr -s '\n' '')  # try to generate the output by jq alone?
+checkSummaries=$(aws support desribe-trusted-advisor-check-summaries --check-ids xxxx --region us-east-1 --query summaries) 
+# The alert status of Trusted Advisor should be ok (green) warning(yellow) error(red) not_avaiable
+
+- IAM users check
+Root user MFA enabled
+aws iam list-virtual-mfa-devices --query VirtualMFADevides[].SerivalNumber |grep -i "root-account-mfa-device"
+aws iam list-users --query 'length(Users)'
+
+- Password policy check
+aws iam get-account-password-policy --query PasswordPolicy
+* Password policy should be defined
+* Allow Users to Change Password
+echo $passwordPolicy | jq ".|.AllowUsersToChangePassword"
+* Require Lower Case Characters in password
+* Require Upper Case Characters in password
+* Require Number Characters in password
+* Expired password
+* Max Password age 
+* Minimum password length
+* Prevent to re-use password
+
+- No EC2 instance in account
+- Verify AWS Account support plan (Enterprise, business, developer...)
+aws support describe-severity-leveal --region us-east-1 --query severityLevels[].name --output text
+
+- VPC check
+- NACs check
+- KMS key check
+- etc
+
+Note:
+- Your personal account might not meet all the creteria here, and you do not need to make your personal account compliance here.
